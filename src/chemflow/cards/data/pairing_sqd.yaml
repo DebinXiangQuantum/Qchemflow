@@ -1,0 +1,12 @@
+id: pairing_sqd
+target: chemflow.correlation_function@1
+template: pairing_sqd
+pack: materials
+relation: approximate
+subgraph: [lattice_model, prepare_state, sample_configurations, ground_energy, correlation_function]
+hyperparameters: {shots: [1024, 2048, 4096, 8192]}
+backends: {correlations: [cpu_numeric]}
+known_controls: [exact_sector_diagonalization, lattice_hf]
+evidence: []
+failure_modes: [incomplete sampled space, no correlation ordering bound, exponential sector vector]
+status: experimental

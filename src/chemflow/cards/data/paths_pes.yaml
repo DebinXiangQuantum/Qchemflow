@@ -1,0 +1,10 @@
+id: paths_pes
+target: chemflow.pes_scan@1
+template: pes_scan
+relation: approximate
+subgraph: [geometry_transform, constrained_optimize, component_energy, pes_scan]
+hyperparameters: {mode: [rigid, relaxed], method: [hf, mp2, ccsd, ccsd_t, fci]}
+backends: {solver: [cpu_numeric]}
+known_controls: [fci]
+failure_modes: [discontinuous local minima, finite-basis reference, neutral closed-shell evaluation only]
+status: experimental

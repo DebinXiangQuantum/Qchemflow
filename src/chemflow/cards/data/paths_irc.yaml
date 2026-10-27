@@ -1,0 +1,9 @@
+id: paths_irc
+target: chemflow.irc@1
+template: irc
+relation: approximate
+subgraph: [irc]
+hyperparameters: {method: [hf, dft, gfn2]}
+backends: {optimizer: [cpu_numeric]}
+failure_modes: [TS refinement may find another saddle, bond-set comparison is not stereochemistry]
+status: experimental

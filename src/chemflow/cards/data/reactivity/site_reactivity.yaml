@@ -1,0 +1,11 @@
+id: app_c_site_reactivity
+target: chemflow.site_reactivity@1
+template: app_c_site_reactivity
+relation: approximate
+subgraph: [enumerate_bonds, homolysis, site_reactivity]
+hyperparameters: {level: {method: hf}}
+backends: {solver: [cpu_numeric]}
+known_controls: []
+evidence: []
+failure_modes: [empirical heuristic is not enzyme kinetics, rigid geometry, no calibration dataset]
+status: experimental

@@ -1,0 +1,14 @@
+id: metabolic_sites
+target: chemflow.metabolic_sites@1
+template: metabolic_sites
+pack: metabolism
+relation: equivalent
+subgraph: [metabolic_sites]
+hyperparameters: {level: {method: hf}}
+backends: {metabolic_sites: [cpu_numeric]}
+known_controls: []
+failure_modes:
+  - Uncalibrated empirical C-H abstraction heuristic, not metabolic kinetics.
+  - Formula is SASA_fraction * sigmoid((90 - BDE_kcal/mol) / 3).
+  - Screening recomputes the declared model, not experimental accuracy.
+status: experimental

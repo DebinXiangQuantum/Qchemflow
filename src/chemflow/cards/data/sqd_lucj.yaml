@@ -1,0 +1,23 @@
+id: sqd_lucj
+target: chemflow.ground_energy@1
+template: sqd
+relation: variational_upper_bound
+subgraph: [prepare_lucj, sample_configurations, recover_configurations, subspace_diagonalize, extend]
+hyperparameters: {shots: [1024, 8192], n_batches: 10, max_iter: 5, carryover_thresh: 0.0001}
+backends: {sampling: [quantum_simulator], diagonalization: [cpu_numeric]}
+known_controls: [fci, sci_pyscf]
+evidence:
+  - path: evidence/hybrid-pulse-chemistry/report/HSQD_SCREEN_20261008.md
+    sha256: 1c82832ccf358e1c46ca68983113e149d713458be3604936677e87762ac171d1
+    date: '2026-10-08'
+    outcome: failed
+    summary: Best finite-measurement HSQD error 67.738 mHa; gate not met.
+    quote: '最佳有限测量HSQD误差67.738 mHa，未达到量子优势。'
+  - path: evidence/hybrid-pulse-chemistry/report/HSQD_SCALING_20261008.md
+    sha256: 51ff16dfa4e76033d52a5626c8e978d895b813d2810e177a25b9b888871c0842
+    date: '2026-10-08'
+    outcome: failed
+    summary: All 27 candidates exceeded a valid SCI upper bound by more than 1.6 mHa.
+    quote: '27项候选均高于相应合法SCI上界超过1.6mHa：True。'
+failure_modes: [insufficient support, readout particle-number errors, classical sampling controls]
+status: experimental

@@ -1,0 +1,2684 @@
+name: full
+tasks:
+- id: h2-equilibrium
+  category: molecular
+  spec:
+    question: Evaluate h2-equilibrium; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0; H 0 0 0.74
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: RHF
+      active:
+        n_elec: 2
+        n_orb: 2
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 2
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.137283834488502
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: easy
+- id: h2-short
+  category: molecular
+  spec:
+    question: Evaluate h2-short; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0; H 0 0 0.5
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: RHF
+      active:
+        n_elec: 2
+        n_orb: 2
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 2
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.0551597944706248
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: easy
+- id: h2-dissociating
+  category: molecular
+  spec:
+    question: Evaluate h2-dissociating; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0; H 0 0 2.5
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: RHF
+      active:
+        n_elec: 2
+        n_orb: 2
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 2
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -0.9360549199556059
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: h2-triplet
+  category: molecular
+  spec:
+    question: Evaluate h2-triplet; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0; H 0 0 1.2
+        spin: 2
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: ROHF
+      active:
+        n_elec: 2
+        n_orb: 2
+      sector:
+        n_alpha: 2
+        n_beta: 0
+        n_orb: 2
+      target_spin: 1.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -0.8284433465108113
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: h2-split-valence
+  category: molecular
+  spec:
+    question: Evaluate h2-split-valence; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0; H 0 0 0.74
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: 6-31g
+        reference: RHF
+      active:
+        n_elec: 2
+        n_orb: 4
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 4
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.1516725449612386
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: h2-split-stretched
+  category: molecular
+  spec:
+    question: Evaluate h2-split-stretched; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0; H 0 0 2.0
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: 6-31g
+        reference: RHF
+      active:
+        n_elec: 2
+        n_orb: 4
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 4
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.014310274713351
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: he-atom
+  category: molecular
+  spec:
+    question: Evaluate he-atom; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: He 0 0 0
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: RHF
+      active:
+        n_elec: 2
+        n_orb: 1
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 1
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -2.807783957539974
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: easy
+- id: li-doublet
+  category: molecular
+  spec:
+    question: Evaluate li-doublet; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: Li 0 0 0
+        spin: 1
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: ROHF
+      active:
+        n_elec: 3
+        n_orb: 5
+      sector:
+        n_alpha: 2
+        n_beta: 1
+        n_orb: 5
+      target_spin: 0.5
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -7.315836552850644
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: lih-valence
+  category: molecular
+  spec:
+    question: Evaluate lih-valence; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: Li 0 0 0; H 0 0 1.6
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: RHF
+      active:
+        n_elec: 2
+        n_orb: 5
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 5
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -7.882096599920251
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: lih-stretched
+  category: molecular
+  spec:
+    question: Evaluate lih-stretched; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: Li 0 0 0; H 0 0 3.0
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: RHF
+      active:
+        n_elec: 4
+        n_orb: 6
+      sector:
+        n_alpha: 2
+        n_beta: 2
+        n_orb: 6
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -7.7988431595024
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: water-valence
+  category: molecular
+  spec:
+    question: Evaluate water-valence; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: O 0 0 0; H 0 0.757 0.587; H 0 -0.757 0.587
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: RHF
+      active:
+        n_elec: 8
+        n_orb: 6
+      sector:
+        n_alpha: 4
+        n_beta: 4
+        n_orb: 6
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.003
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -75.01256905375689
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: h5-doublet
+  category: molecular
+  spec:
+    question: Evaluate h5-doublet; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0.0; H 0 0 1.4; H 0 0 2.8; H 0 0 4.199999999999999; H 0 0 5.6
+        spin: 1
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: ROHF
+      active:
+        n_elec: 5
+        n_orb: 5
+      sector:
+        n_alpha: 3
+        n_beta: 2
+        n_orb: 5
+      target_spin: 0.5
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.003
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -2.5187874922792086
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: lih-ten-orbitals
+  category: molecular
+  spec:
+    question: Evaluate lih-ten-orbitals; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: Li 0 0 0; H 0 0 1.6
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: 6-31g
+        reference: RHF
+      active:
+        n_elec: 2
+        n_orb: 10
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 10
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -7.998084701470794
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: hf-valence
+  category: molecular
+  spec:
+    question: Evaluate hf-valence; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0; F 0 0 0.92
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: RHF
+      active:
+        n_elec: 8
+        n_orb: 5
+      sector:
+        n_alpha: 4
+        n_beta: 4
+        n_orb: 5
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.003
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -98.59715284720815
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: nh-triplet
+  category: molecular
+  spec:
+    question: Evaluate nh-triplet; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: N 0 0 0; H 0 0 1.05
+        spin: 2
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: ROHF
+      active:
+        n_elec: 6
+        n_orb: 5
+      sector:
+        n_alpha: 4
+        n_beta: 2
+        n_orb: 5
+      target_spin: 1.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.003
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -54.286280356372785
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: heh-cation
+  category: molecular
+  spec:
+    question: Evaluate heh-cation; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: He 0 0 0; H 0 0 0.8
+        spin: 0
+        charge: 1
+      electronic_model:
+        basis: 6-31g
+        reference: RHF
+      active:
+        n_elec: 2
+        n_orb: 4
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 4
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -2.9318179131524555
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: atomize-h2-0p6-sto-3g
+  category: reaction
+  spec:
+    question: Evaluate atomize-h2-0p6-sto-3g; preserve the signed model and accuracy gates
+    target:
+      kind: reaction_energy
+      electronic_model:
+        basis: sto-3g
+      species:
+      - molecule:
+          atoms: H 0 0 0; H 0 0 0.6
+          spin: 0
+          charge: 0
+        active:
+          n_elec: 2
+          n_orb: 2
+        sector:
+          n_alpha: 1
+          n_beta: 1
+          n_orb: 2
+        target_spin: 0.0
+        name: H2
+        coefficient: -1
+      - molecule:
+          atoms: H 0 0 0
+          spin: 1
+          charge: 0
+        active:
+          n_elec: 1
+          n_orb: 1
+        sector:
+          n_alpha: 1
+          n_beta: 0
+          n_orb: 1
+        target_spin: 0.5
+        name: H
+        coefficient: 2
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.18312230775498994
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Stoichiometric sum of independent direct PySCF RHF/ROHF CASCI energies with each
+    declared active space; no geometry relaxation. Recompute: scripts/eval_reference_values.py --suite
+    full. No ChemFlow pipeline calls.'
+  difficulty: easy
+- id: atomize-h2-0p74-sto-3g
+  category: reaction
+  spec:
+    question: Evaluate atomize-h2-0p74-sto-3g; preserve the signed model and accuracy gates
+    target:
+      kind: reaction_energy
+      electronic_model:
+        basis: sto-3g
+      species:
+      - molecule:
+          atoms: H 0 0 0; H 0 0 0.74
+          spin: 0
+          charge: 0
+        active:
+          n_elec: 2
+          n_orb: 2
+        sector:
+          n_alpha: 1
+          n_beta: 1
+          n_orb: 2
+        target_spin: 0.0
+        name: H2
+        coefficient: -1
+      - molecule:
+          atoms: H 0 0 0
+          spin: 1
+          charge: 0
+        active:
+          n_elec: 1
+          n_orb: 1
+        sector:
+          n_alpha: 1
+          n_beta: 0
+          n_orb: 1
+        target_spin: 0.5
+        name: H
+        coefficient: 2
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.20412013537395146
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Stoichiometric sum of independent direct PySCF RHF/ROHF CASCI energies with each
+    declared active space; no geometry relaxation. Recompute: scripts/eval_reference_values.py --suite
+    full. No ChemFlow pipeline calls.'
+  difficulty: easy
+- id: atomize-h2-1p5-sto-3g
+  category: reaction
+  spec:
+    question: Evaluate atomize-h2-1p5-sto-3g; preserve the signed model and accuracy gates
+    target:
+      kind: reaction_energy
+      electronic_model:
+        basis: sto-3g
+      species:
+      - molecule:
+          atoms: H 0 0 0; H 0 0 1.5
+          spin: 0
+          charge: 0
+        active:
+          n_elec: 2
+          n_orb: 2
+        sector:
+          n_alpha: 1
+          n_beta: 1
+          n_orb: 2
+        target_spin: 0.0
+        name: H2
+        coefficient: -1
+      - molecule:
+          atoms: H 0 0 0
+          spin: 1
+          charge: 0
+        active:
+          n_elec: 1
+          n_orb: 1
+        sector:
+          n_alpha: 1
+          n_beta: 0
+          n_orb: 1
+        target_spin: 0.5
+        name: H
+        coefficient: 2
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.06498565435685943
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Stoichiometric sum of independent direct PySCF RHF/ROHF CASCI energies with each
+    declared active space; no geometry relaxation. Recompute: scripts/eval_reference_values.py --suite
+    full. No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: atomize-h2-2p5-sto-3g
+  category: reaction
+  spec:
+    question: Evaluate atomize-h2-2p5-sto-3g; preserve the signed model and accuracy gates
+    target:
+      kind: reaction_energy
+      electronic_model:
+        basis: sto-3g
+      species:
+      - molecule:
+          atoms: H 0 0 0; H 0 0 2.5
+          spin: 0
+          charge: 0
+        active:
+          n_elec: 2
+          n_orb: 2
+        sector:
+          n_alpha: 1
+          n_beta: 1
+          n_orb: 2
+        target_spin: 0.0
+        name: H2
+        coefficient: -1
+      - molecule:
+          atoms: H 0 0 0
+          spin: 1
+          charge: 0
+        active:
+          n_elec: 1
+          n_orb: 1
+        sector:
+          n_alpha: 1
+          n_beta: 0
+          n_orb: 1
+        target_spin: 0.5
+        name: H
+        coefficient: 2
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.0028912208410554197
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Stoichiometric sum of independent direct PySCF RHF/ROHF CASCI energies with each
+    declared active space; no geometry relaxation. Recompute: scripts/eval_reference_values.py --suite
+    full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: atomize-h2-0p74-6-31g
+  category: reaction
+  spec:
+    question: Evaluate atomize-h2-0p74-6-31g; preserve the signed model and accuracy gates
+    target:
+      kind: reaction_energy
+      electronic_model:
+        basis: 6-31g
+      species:
+      - molecule:
+          atoms: H 0 0 0; H 0 0 0.74
+          spin: 0
+          charge: 0
+        active:
+          n_elec: 2
+          n_orb: 4
+        sector:
+          n_alpha: 1
+          n_beta: 1
+          n_orb: 4
+        target_spin: 0.0
+        name: H2
+        coefficient: -1
+      - molecule:
+          atoms: H 0 0 0
+          spin: 1
+          charge: 0
+        active:
+          n_elec: 1
+          n_orb: 2
+        sector:
+          n_alpha: 1
+          n_beta: 0
+          n_orb: 2
+        target_spin: 0.5
+        name: H
+        coefficient: 2
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.15520672350309828
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Stoichiometric sum of independent direct PySCF RHF/ROHF CASCI energies with each
+    declared active space; no geometry relaxation. Recompute: scripts/eval_reference_values.py --suite
+    full. No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: atomize-h2-2p0-6-31g
+  category: reaction
+  spec:
+    question: Evaluate atomize-h2-2p0-6-31g; preserve the signed model and accuracy gates
+    target:
+      kind: reaction_energy
+      electronic_model:
+        basis: 6-31g
+      species:
+      - molecule:
+          atoms: H 0 0 0; H 0 0 2.0
+          spin: 0
+          charge: 0
+        active:
+          n_elec: 2
+          n_orb: 4
+        sector:
+          n_alpha: 1
+          n_beta: 1
+          n_orb: 4
+        target_spin: 0.0
+        name: H2
+        coefficient: -1
+      - molecule:
+          atoms: H 0 0 0
+          spin: 1
+          charge: 0
+        active:
+          n_elec: 1
+          n_orb: 2
+        sector:
+          n_alpha: 1
+          n_beta: 0
+          n_orb: 2
+        target_spin: 0.5
+        name: H
+        coefficient: 2
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.01784445325521067
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Stoichiometric sum of independent direct PySCF RHF/ROHF CASCI energies with each
+    declared active space; no geometry relaxation. Recompute: scripts/eval_reference_values.py --suite
+    full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: assemble-h4-chain
+  category: reaction
+  spec:
+    question: Evaluate assemble-h4-chain; preserve the signed model and accuracy gates
+    target:
+      kind: reaction_energy
+      electronic_model:
+        basis: sto-3g
+      species:
+      - molecule:
+          atoms: H 0 0 0; H 0 0 0.74
+          spin: 0
+          charge: 0
+        active:
+          n_elec: 2
+          n_orb: 2
+        sector:
+          n_alpha: 1
+          n_beta: 1
+          n_orb: 2
+        target_spin: 0.0
+        name: H2
+        coefficient: -2
+      - molecule:
+          atoms: H 0 0 0; H 0 0 1.5; H 0 0 3; H 0 0 4.5
+          spin: 0
+          charge: 0
+        active:
+          n_elec: 4
+          n_orb: 4
+        sector:
+          n_alpha: 2
+          n_beta: 2
+          n_orb: 4
+        target_spin: 0.0
+        name: H4
+        coefficient: 1
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.27841734345819447
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Stoichiometric sum of independent direct PySCF RHF/ROHF CASCI energies with each
+    declared active space; no geometry relaxation. Recompute: scripts/eval_reference_values.py --suite
+    full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: atomize-lih-valence
+  category: reaction
+  spec:
+    question: Evaluate atomize-lih-valence; preserve the signed model and accuracy gates
+    target:
+      kind: reaction_energy
+      electronic_model:
+        basis: sto-3g
+      species:
+      - molecule:
+          atoms: Li 0 0 0; H 0 0 1.6
+          spin: 0
+          charge: 0
+        active:
+          n_elec: 2
+          n_orb: 5
+        sector:
+          n_alpha: 1
+          n_beta: 1
+          n_orb: 5
+        target_spin: 0.0
+        name: LiH
+        coefficient: -1
+      - molecule:
+          atoms: Li 0 0 0
+          spin: 1
+          charge: 0
+        active:
+          n_elec: 1
+          n_orb: 4
+        sector:
+          n_alpha: 1
+          n_beta: 0
+          n_orb: 4
+        target_spin: 0.5
+        name: Li
+        coefficient: 1
+      - molecule:
+          atoms: H 0 0 0
+          spin: 1
+          charge: 0
+        active:
+          n_elec: 1
+          n_orb: 1
+        sector:
+          n_alpha: 1
+          n_beta: 0
+          n_orb: 1
+        target_spin: 0.5
+        name: H
+        coefficient: 1
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.09998876908188825
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Stoichiometric sum of independent direct PySCF RHF/ROHF CASCI energies with each
+    declared active space; no geometry relaxation. Recompute: scripts/eval_reference_values.py --suite
+    full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: hcn-hnc-enthalpy-200k
+  category: thermo
+  spec:
+    question: Evaluate hcn-hnc-enthalpy-200k; preserve the signed model and accuracy gates
+    target:
+      kind: reaction_energy
+      electronic_model:
+        basis: sto-3g
+      species:
+      - name: HCN
+        molecule:
+          atoms: H 0 0 -1.065; C 0 0 0; N 0 0 1.156
+        coefficient: -1
+        active:
+          n_elec: 4
+          n_orb: 4
+        sector:
+          n_alpha: 2
+          n_beta: 2
+          n_orb: 4
+        target_spin: 0
+      - name: HNC
+        molecule:
+          atoms: H 0 0 -0.995; N 0 0 0; C 0 0 1.170
+        coefficient: 1
+        active:
+          n_elec: 4
+          n_orb: 4
+        sector:
+          n_alpha: 2
+          n_beta: 2
+          n_orb: 4
+        target_spin: 0
+      thermo:
+        quantity: enthalpy
+        temperature_K: 200.0
+        pressure_Pa: 101325.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.09419998386614736
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Independent scipy Nelder-Mead RHF/STO-3G bond optimization of linear HCN and HNC;
+    PySCF analytic Hessian and harmonic_analysis; canonical CASCI(4e,4o), five frozen occupied orbitals.
+    Independent ideal-gas linear-rotor RRHO enthalpy/Gibbs including vibrational ZPE, isotope masses
+    and rotational symmetry number 1 at the declared temperature/pressure. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: easy
+- id: hcn-hnc-enthalpy-500k
+  category: thermo
+  spec:
+    question: Evaluate hcn-hnc-enthalpy-500k; preserve the signed model and accuracy gates
+    target:
+      kind: reaction_energy
+      electronic_model:
+        basis: sto-3g
+      species:
+      - name: HCN
+        molecule:
+          atoms: H 0 0 -1.065; C 0 0 0; N 0 0 1.156
+        coefficient: -1
+        active:
+          n_elec: 4
+          n_orb: 4
+        sector:
+          n_alpha: 2
+          n_beta: 2
+          n_orb: 4
+        target_spin: 0
+      - name: HNC
+        molecule:
+          atoms: H 0 0 -0.995; N 0 0 0; C 0 0 1.170
+        coefficient: 1
+        active:
+          n_elec: 4
+          n_orb: 4
+        sector:
+          n_alpha: 2
+          n_beta: 2
+          n_orb: 4
+        target_spin: 0
+      thermo:
+        quantity: enthalpy
+        temperature_K: 500.0
+        pressure_Pa: 10000.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.09454874979779504
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Independent scipy Nelder-Mead RHF/STO-3G bond optimization of linear HCN and HNC;
+    PySCF analytic Hessian and harmonic_analysis; canonical CASCI(4e,4o), five frozen occupied orbitals.
+    Independent ideal-gas linear-rotor RRHO enthalpy/Gibbs including vibrational ZPE, isotope masses
+    and rotational symmetry number 1 at the declared temperature/pressure. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: hcn-hnc-enthalpy-1200k
+  category: thermo
+  spec:
+    question: Evaluate hcn-hnc-enthalpy-1200k; preserve the signed model and accuracy gates
+    target:
+      kind: reaction_energy
+      electronic_model:
+        basis: sto-3g
+      species:
+      - name: HCN
+        molecule:
+          atoms: H 0 0 -1.065; C 0 0 0; N 0 0 1.156
+        coefficient: -1
+        active:
+          n_elec: 4
+          n_orb: 4
+        sector:
+          n_alpha: 2
+          n_beta: 2
+          n_orb: 4
+        target_spin: 0
+      - name: HNC
+        molecule:
+          atoms: H 0 0 -0.995; N 0 0 0; C 0 0 1.170
+        coefficient: 1
+        active:
+          n_elec: 4
+          n_orb: 4
+        sector:
+          n_alpha: 2
+          n_beta: 2
+          n_orb: 4
+        target_spin: 0
+      thermo:
+        quantity: enthalpy
+        temperature_K: 1200.0
+        pressure_Pa: 1000000.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.09495357864348364
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Independent scipy Nelder-Mead RHF/STO-3G bond optimization of linear HCN and HNC;
+    PySCF analytic Hessian and harmonic_analysis; canonical CASCI(4e,4o), five frozen occupied orbitals.
+    Independent ideal-gas linear-rotor RRHO enthalpy/Gibbs including vibrational ZPE, isotope masses
+    and rotational symmetry number 1 at the declared temperature/pressure. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: hcn-hnc-gibbs-298k
+  category: thermo
+  spec:
+    question: Evaluate hcn-hnc-gibbs-298k; preserve the signed model and accuracy gates
+    target:
+      kind: reaction_energy
+      electronic_model:
+        basis: sto-3g
+      species:
+      - name: HCN
+        molecule:
+          atoms: H 0 0 -1.065; C 0 0 0; N 0 0 1.156
+        coefficient: -1
+        active:
+          n_elec: 4
+          n_orb: 4
+        sector:
+          n_alpha: 2
+          n_beta: 2
+          n_orb: 4
+        target_spin: 0
+      - name: HNC
+        molecule:
+          atoms: H 0 0 -0.995; N 0 0 0; C 0 0 1.170
+        coefficient: 1
+        active:
+          n_elec: 4
+          n_orb: 4
+        sector:
+          n_alpha: 2
+          n_beta: 2
+          n_orb: 4
+        target_spin: 0
+      thermo:
+        quantity: gibbs
+        temperature_K: 298.15
+        pressure_Pa: 101325.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.09413734467925394
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Independent scipy Nelder-Mead RHF/STO-3G bond optimization of linear HCN and HNC;
+    PySCF analytic Hessian and harmonic_analysis; canonical CASCI(4e,4o), five frozen occupied orbitals.
+    Independent ideal-gas linear-rotor RRHO enthalpy/Gibbs including vibrational ZPE, isotope masses
+    and rotational symmetry number 1 at the declared temperature/pressure. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: hcn-hnc-gibbs-800k
+  category: thermo
+  spec:
+    question: Evaluate hcn-hnc-gibbs-800k; preserve the signed model and accuracy gates
+    target:
+      kind: reaction_energy
+      electronic_model:
+        basis: sto-3g
+      species:
+      - name: HCN
+        molecule:
+          atoms: H 0 0 -1.065; C 0 0 0; N 0 0 1.156
+        coefficient: -1
+        active:
+          n_elec: 4
+          n_orb: 4
+        sector:
+          n_alpha: 2
+          n_beta: 2
+          n_orb: 4
+        target_spin: 0
+      - name: HNC
+        molecule:
+          atoms: H 0 0 -0.995; N 0 0 0; C 0 0 1.170
+        coefficient: 1
+        active:
+          n_elec: 4
+          n_orb: 4
+        sector:
+          n_alpha: 2
+          n_beta: 2
+          n_orb: 4
+        target_spin: 0
+      thermo:
+        quantity: gibbs
+        temperature_K: 800.0
+        pressure_Pa: 500000.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.09352796775236527
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Independent scipy Nelder-Mead RHF/STO-3G bond optimization of linear HCN and HNC;
+    PySCF analytic Hessian and harmonic_analysis; canonical CASCI(4e,4o), five frozen occupied orbitals.
+    Independent ideal-gas linear-rotor RRHO enthalpy/Gibbs including vibrational ZPE, isotope masses
+    and rotational symmetry number 1 at the declared temperature/pressure. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: hubbard-chain2-u2-hartree
+  category: lattice
+  spec:
+    question: Evaluate hubbard-chain2-u2-hartree; preserve the signed model and accuracy gates
+    target:
+      kind: lattice_ground_energy
+      lattice:
+        model: hubbard
+        geometry: chain
+        n_sites: 2
+        t: 1.0
+        U: 2.0
+        unit: hartree
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 2
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.003
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.2360679774997863
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF direct_spin1 FCI of independent nearest-neighbor Hubbard one-body
+    integrals and on-site (ii|ii)=U, in the declared alpha/beta sector; eV converted with scipy.constants.
+    Recompute: scripts/eval_reference_values.py --suite full. No ChemFlow pipeline calls.'
+  difficulty: easy
+- id: hubbard-chain4-u4-hartree
+  category: lattice
+  spec:
+    question: Evaluate hubbard-chain4-u4-hartree; preserve the signed model and accuracy gates
+    target:
+      kind: lattice_ground_energy
+      lattice:
+        model: hubbard
+        geometry: chain
+        n_sites: 4
+        t: 1.0
+        U: 4.0
+        unit: hartree
+      sector:
+        n_alpha: 2
+        n_beta: 2
+        n_orb: 4
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.003
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.9531453086845492
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF direct_spin1 FCI of independent nearest-neighbor Hubbard one-body
+    integrals and on-site (ii|ii)=U, in the declared alpha/beta sector; eV converted with scipy.constants.
+    Recompute: scripts/eval_reference_values.py --suite full. No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: hubbard-ring4-u8-hartree
+  category: lattice
+  spec:
+    question: Evaluate hubbard-ring4-u8-hartree; preserve the signed model and accuracy gates
+    target:
+      kind: lattice_ground_energy
+      lattice:
+        model: hubbard
+        geometry: ring
+        n_sites: 4
+        t: 1.0
+        U: 8.0
+        unit: hartree
+      sector:
+        n_alpha: 2
+        n_beta: 2
+        n_orb: 4
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.003
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.3202349582719037
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF direct_spin1 FCI of independent nearest-neighbor Hubbard one-body
+    integrals and on-site (ii|ii)=U, in the declared alpha/beta sector; eV converted with scipy.constants.
+    Recompute: scripts/eval_reference_values.py --suite full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: hubbard-ring6-u4-hartree
+  category: lattice
+  spec:
+    question: Evaluate hubbard-ring6-u4-hartree; preserve the signed model and accuracy gates
+    target:
+      kind: lattice_ground_energy
+      lattice:
+        model: hubbard
+        geometry: ring
+        n_sites: 6
+        t: 1.0
+        U: 4.0
+        unit: hartree
+      sector:
+        n_alpha: 3
+        n_beta: 3
+        n_orb: 6
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.003
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -3.668706178872945
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF direct_spin1 FCI of independent nearest-neighbor Hubbard one-body
+    integrals and on-site (ii|ii)=U, in the declared alpha/beta sector; eV converted with scipy.constants.
+    Recompute: scripts/eval_reference_values.py --suite full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: hubbard-chain6-u2-ev
+  category: lattice
+  spec:
+    question: Evaluate hubbard-chain6-u2-ev; preserve the signed model and accuracy gates
+    target:
+      kind: lattice_ground_energy
+      lattice:
+        model: hubbard
+        geometry: chain
+        n_sites: 6
+        t: 0.5
+        U: 2.0
+        unit: eV
+      sector:
+        n_alpha: 2
+        n_beta: 2
+        n_orb: 6
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.001
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -0.08125405864634834
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF direct_spin1 FCI of independent nearest-neighbor Hubbard one-body
+    integrals and on-site (ii|ii)=U, in the declared alpha/beta sector; eV converted with scipy.constants.
+    Recompute: scripts/eval_reference_values.py --suite full. No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: hubbard-chain5-u6-hartree
+  category: lattice
+  spec:
+    question: Evaluate hubbard-chain5-u6-hartree; preserve the signed model and accuracy gates
+    target:
+      kind: lattice_ground_energy
+      lattice:
+        model: hubbard
+        geometry: chain
+        n_sites: 5
+        t: 1.5
+        U: 6.0
+        unit: hartree
+      sector:
+        n_alpha: 3
+        n_beta: 2
+        n_orb: 5
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.003
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -3.6262095072213008
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF direct_spin1 FCI of independent nearest-neighbor Hubbard one-body
+    integrals and on-site (ii|ii)=U, in the declared alpha/beta sector; eV converted with scipy.constants.
+    Recompute: scripts/eval_reference_values.py --suite full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: hubbard-chain8-u8-hartree
+  category: lattice
+  spec:
+    question: Evaluate hubbard-chain8-u8-hartree; preserve the signed model and accuracy gates
+    target:
+      kind: lattice_ground_energy
+      lattice:
+        model: hubbard
+        geometry: chain
+        n_sites: 8
+        t: 1.0
+        U: 8.0
+        unit: hartree
+      sector:
+        n_alpha: 2
+        n_beta: 2
+        n_orb: 8
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.003
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -5.277973249679368
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF direct_spin1 FCI of independent nearest-neighbor Hubbard one-body
+    integrals and on-site (ii|ii)=U, in the declared alpha/beta sector; eV converted with scipy.constants.
+    Recompute: scripts/eval_reference_values.py --suite full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: impurity-weak
+  category: spectral
+  spec:
+    question: Evaluate impurity-weak; preserve the signed model and accuracy gates
+    target:
+      kind: spectral_function
+      model:
+        impurity_model:
+          U: 1.0
+          eps_bath:
+          - 0.0
+          t_bath:
+          - 0.5
+          unit: hartree
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 2
+      orbital: 0
+      spin: alpha
+      omega:
+        start: -6.0
+        stop: 6.0
+        n: 301
+        unit: hartree
+      eta: 0.1
+    gates:
+    - kind: l1_error_vs_exact
+      threshold: 0.05
+      unit: dimensionless
+    - kind: relation_at_least
+      relation: equivalent
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.9892362351602386
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Independent dense full-Fock Jordan-Wigner impurity Hamiltonian, ground/particle/hole
+    sector eigendecompositions, Lehmann sum and trapezoidal integrated spectral weight on the declared
+    frequency grid; not a ChemFlow operator. Recompute: scripts/eval_reference_values.py --suite full.
+    No ChemFlow pipeline calls.'
+  difficulty: easy
+- id: impurity-strong
+  category: spectral
+  spec:
+    question: Evaluate impurity-strong; preserve the signed model and accuracy gates
+    target:
+      kind: spectral_function
+      model:
+        impurity_model:
+          U: 6.0
+          eps_bath:
+          - 0.0
+          t_bath:
+          - 0.3
+          unit: hartree
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 2
+      orbital: 0
+      spin: beta
+      omega:
+        start: -6.0
+        stop: 6.0
+        n: 301
+        unit: hartree
+      eta: 0.15
+    gates:
+    - kind: l1_error_vs_exact
+      threshold: 0.1
+      unit: dimensionless
+    - kind: relation_at_least
+      relation: equivalent
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.9785574815652764
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Independent dense full-Fock Jordan-Wigner impurity Hamiltonian, ground/particle/hole
+    sector eigendecompositions, Lehmann sum and trapezoidal integrated spectral weight on the declared
+    frequency grid; not a ChemFlow operator. Recompute: scripts/eval_reference_values.py --suite full.
+    No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: impurity-asymmetric
+  category: spectral
+  spec:
+    question: Evaluate impurity-asymmetric; preserve the signed model and accuracy gates
+    target:
+      kind: spectral_function
+      model:
+        impurity_model:
+          U: 3.0
+          eps_bath:
+          - 0.4
+          t_bath:
+          - 0.7
+          unit: hartree
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 2
+      orbital: 1
+      spin: alpha
+      omega:
+        start: -6.0
+        stop: 6.0
+        n: 301
+        unit: hartree
+      eta: 0.08
+    gates:
+    - kind: l1_error_vs_exact
+      threshold: 0.1
+      unit: dimensionless
+    - kind: relation_at_least
+      relation: equivalent
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.9913472880805585
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Independent dense full-Fock Jordan-Wigner impurity Hamiltonian, ground/particle/hole
+    sector eigendecompositions, Lehmann sum and trapezoidal integrated spectral weight on the declared
+    frequency grid; not a ChemFlow operator. Recompute: scripts/eval_reference_values.py --suite full.
+    No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: impurity-two-bath
+  category: spectral
+  spec:
+    question: Evaluate impurity-two-bath; preserve the signed model and accuracy gates
+    target:
+      kind: spectral_function
+      model:
+        impurity_model:
+          U: 4.0
+          eps_bath:
+          - -0.7
+          - 0.6
+          t_bath:
+          - 0.4
+          - 0.5
+          unit: hartree
+      sector:
+        n_alpha: 2
+        n_beta: 1
+        n_orb: 3
+      orbital: 0
+      spin: beta
+      omega:
+        start: -6.0
+        stop: 6.0
+        n: 301
+        unit: hartree
+      eta: 0.2
+    gates:
+    - kind: l1_error_vs_exact
+      threshold: 0.1
+      unit: dimensionless
+    - kind: relation_at_least
+      relation: equivalent
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.9756463536605644
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Independent dense full-Fock Jordan-Wigner impurity Hamiltonian, ground/particle/hole
+    sector eigendecompositions, Lehmann sum and trapezoidal integrated spectral weight on the declared
+    frequency grid; not a ChemFlow operator. Recompute: scripts/eval_reference_values.py --suite full.
+    No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: h2-dimer-collinear
+  category: interaction
+  spec:
+    question: Evaluate h2-dimer-collinear; preserve the signed model and accuracy gates
+    target:
+      kind: interaction_energy
+      complex:
+        atoms: H 0 0 0; H 0 0 0.74; H 0 0 3; H 0 0 3.74
+      fragments:
+      - - 0
+        - 1
+      - - 2
+        - 3
+      electronic_model:
+        basis: sto-3g
+      counterpoise: true
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0005
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.0006856015684069128
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/full FCI of complex minus all fragment FCIs; other fragment atoms
+    become ghost centers only when counterpoise is declared. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: easy
+- id: h2-dimer-parallel
+  category: interaction
+  spec:
+    question: Evaluate h2-dimer-parallel; preserve the signed model and accuracy gates
+    target:
+      kind: interaction_energy
+      complex:
+        atoms: H 0 0 0; H 0 0 0.74; H 2 0 0; H 2 0 0.74
+      fragments:
+      - - 0
+        - 1
+      - - 2
+        - 3
+      electronic_model:
+        basis: sto-3g
+      counterpoise: true
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0005
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.012846671848814495
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/full FCI of complex minus all fragment FCIs; other fragment atoms
+    become ghost centers only when counterpoise is declared. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: h2-dimer-crossed
+  category: interaction
+  spec:
+    question: Evaluate h2-dimer-crossed; preserve the signed model and accuracy gates
+    target:
+      kind: interaction_energy
+      complex:
+        atoms: H 0 0 -0.37; H 0 0 0.37; H -0.37 2.5 0; H 0.37 2.5 0
+      fragments:
+      - - 0
+        - 1
+      - - 2
+        - 3
+      electronic_model:
+        basis: sto-3g
+      counterpoise: true
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0005
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.0023049652522271202
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/full FCI of complex minus all fragment FCIs; other fragment atoms
+    become ghost centers only when counterpoise is declared. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: h2-dimer-no-cp
+  category: interaction
+  spec:
+    question: Evaluate h2-dimer-no-cp; preserve the signed model and accuracy gates
+    target:
+      kind: interaction_energy
+      complex:
+        atoms: H 0 0 0; H 0 0 1.5; H 2.5 0 0; H 2.5 0 1.5
+      fragments:
+      - - 0
+        - 1
+      - - 2
+        - 3
+      electronic_model:
+        basis: sto-3g
+      counterpoise: false
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0005
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.0030329645568516472
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/full FCI of complex minus all fragment FCIs; other fragment atoms
+    become ghost centers only when counterpoise is declared. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: select-h4-1p3
+  category: selection
+  spec:
+    question: Evaluate select-h4-1p3; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0.0; H 0 0 1.3; H 0 0 2.6; H 0 0 3.9000000000000004
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: RHF
+      active:
+        n_elec: 4
+        n_orb: 4
+      sector:
+        n_alpha: 2
+        n_beta: 2
+        n_orb: 4
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -2.0652289632712906
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: select-h4-1p4
+  category: selection
+  spec:
+    question: Evaluate select-h4-1p4; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0.0; H 0 0 1.4; H 0 0 2.8; H 0 0 4.199999999999999
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: RHF
+      active:
+        n_elec: 4
+        n_orb: 4
+      sector:
+        n_alpha: 2
+        n_beta: 2
+        n_orb: 4
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -2.02907049359196
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: select-h4-1p5
+  category: selection
+  spec:
+    question: Evaluate select-h4-1p5; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0.0; H 0 0 1.5; H 0 0 3.0; H 0 0 4.5
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: RHF
+      active:
+        n_elec: 4
+        n_orb: 4
+      sector:
+        n_alpha: 2
+        n_beta: 2
+        n_orb: 4
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.9961503255188093
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: select-h4-1p7
+  category: selection
+  spec:
+    question: Evaluate select-h4-1p7; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0.0; H 0 0 1.7; H 0 0 3.4; H 0 0 5.1
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: RHF
+      active:
+        n_elec: 4
+        n_orb: 4
+      sector:
+        n_alpha: 2
+        n_beta: 2
+        n_orb: 4
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.9436920386881211
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: select-h4-1p8
+  category: selection
+  spec:
+    question: Evaluate select-h4-1p8; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0.0; H 0 0 1.8; H 0 0 3.6; H 0 0 5.4
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: RHF
+      active:
+        n_elec: 4
+        n_orb: 4
+      sector:
+        n_alpha: 2
+        n_beta: 2
+        n_orb: 4
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.9244306381367238
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: select-h4-2p0
+  category: selection
+  spec:
+    question: Evaluate select-h4-2p0; preserve the signed model and accuracy gates
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0.0; H 0 0 2.0; H 0 0 4.0; H 0 0 6.0
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: RHF
+      active:
+        n_elec: 4
+        n_orb: 4
+      sector:
+        n_alpha: 2
+        n_beta: 2
+        n_orb: 4
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.897780645989874
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: hard
+- id: helium-dimer-split-valence
+  category: interaction
+  spec:
+    question: Evaluate helium-dimer-split-valence; preserve the signed model and accuracy gates
+    target:
+      kind: interaction_energy
+      complex:
+        atoms: He 0 0 0; He 0 0 2.5
+      fragments:
+      - - 0
+      - - 1
+      electronic_model:
+        basis: 6-31g
+      counterpoise: true
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0001
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.0002750868870728951
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/full FCI of complex minus all fragment FCIs; other fragment atoms
+    become ghost centers only when counterpoise is declared. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: medium
+- id: refuse-wall-s
+  category: refusal
+  spec:
+    question: Refuse numerical execution under the zero wall-time budget without changing the signed target
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0; H 0 0 0.74
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: RHF
+      active:
+        n_elec: 2
+        n_orb: 2
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 2
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 0
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.137283834488502
+    decision_in:
+    - refused
+    outcome: refused
+    refusal_code: CF-E070
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: easy
+- id: refuse-cpu-core-s
+  category: refusal
+  spec:
+    question: Refuse numerical execution under the zero CPU-core-time budget without changing the signed target
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0; H 0 0 0.74
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: RHF
+      active:
+        n_elec: 2
+        n_orb: 2
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 2
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+      cpu_core_s: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.137283834488502
+    decision_in:
+    - refused
+    outcome: refused
+    refusal_code: CF-E070
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: easy
+- id: refuse-sim-shots
+  category: refusal
+  spec:
+    question: Can the standard 1024-plus-2048-shot screening batch execute under this budget?
+      Refuse an unaffordable batch; do not claim that no shot-free method could answer the target.
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0; H 0 0 0.74
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: RHF
+      active:
+        n_elec: 2
+        n_orb: 2
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 2
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 2048
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.137283834488502
+    decision_in:
+    - refused
+    outcome: refused
+    refusal_code: CF-E070
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: easy
+- id: refuse-effects
+  category: refusal
+  spec:
+    question: Refuse execution when the task permits no effects, including pure computations
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0; H 0 0 0.74
+        spin: 0
+        charge: 0
+      electronic_model:
+        basis: sto-3g
+        reference: RHF
+      active:
+        n_elec: 2
+        n_orb: 2
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 2
+      target_spin: 0.0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 600
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects: []
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.137283834488502
+    decision_in:
+    - refused
+    outcome: refused
+    refusal_code: CF-E120
+  reference_source: 'Direct PySCF RHF/ROHF canonical-orbital CASCI with the declared active electrons/orbitals;
+    (total-active electrons)/2 frozen occupied orbitals. Full spaces equal FCI. Recompute: scripts/eval_reference_values.py
+    --suite full. No ChemFlow pipeline calls.'
+  difficulty: easy

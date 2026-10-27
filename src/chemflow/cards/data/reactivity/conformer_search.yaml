@@ -1,0 +1,11 @@
+id: app_c_conformer_search
+target: chemflow.conformer_search@1
+template: app_c_conformer_search
+relation: approximate
+subgraph: [conformer_search, boltzmann_weights]
+hyperparameters: {level: {method: gfn2}, count: 20, rmsd: 0.3}
+backends: {solver: [cpu_numeric]}
+known_controls: []
+evidence: []
+failure_modes: [incomplete conformational coverage, local minima, model-dependent energies]
+status: experimental

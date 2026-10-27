@@ -1,0 +1,18 @@
+id: logs_esol
+target: chemflow.logs_esol@1
+template: logs_esol
+relation: equivalent
+subgraph: [logs_esol]
+hyperparameters:
+  model: esol
+  model_card: chemflow.empirical.model_card("esol")
+  source: https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/delaney-processed.csv
+  licence_note: "Delaney, J. Chem. Inf. Comput. Sci. 2004, 44, 1000; via MoleculeNet. Redistributed research dataset; no separate dataset licence is asserted."
+backends: {logs_esol: [cpu_numeric]}
+known_controls: [logs_gse]
+evidence: []
+failure_modes:
+  - Model-defined logS, not experimental solubility (model_change).
+  - Outside training elements, descriptor ranges, or Morgan Tanimoto below 0.3.
+  - Dataset RMSE is not a per-molecule error bound; no pH or temperature correction.
+status: experimental

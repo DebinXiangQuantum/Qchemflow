@@ -1,0 +1,46 @@
+name: QCL CPU and Agent
+
+on:
+  push:
+    paths:
+      - .github/workflows/qcl.yml
+      - qcl/**
+      - src/chemflow/impls/pyscf_impls.py
+      - src/chemflow/runtime/artifacts.py
+      - src/chemflow/units.py
+      - src/chemflow/agent/qcl.py
+      - src/chemflow/agent/memory.py
+      - src/chemflow/cli.py
+      - tests/test_qcl_agent.py
+  pull_request:
+    paths:
+      - .github/workflows/qcl.yml
+      - qcl/**
+      - src/chemflow/impls/pyscf_impls.py
+      - src/chemflow/runtime/artifacts.py
+      - src/chemflow/units.py
+      - src/chemflow/agent/qcl.py
+      - src/chemflow/agent/memory.py
+      - src/chemflow/cli.py
+      - tests/test_qcl_agent.py
+
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: python -m venv .venv
+      - run: .venv/bin/python -m pip install -e '.[quantum,reactivity,paths]' pytest ruff maturin
+      - run: cargo fmt --all --check
+        working-directory: qcl
+      - run: PYO3_PYTHON="$GITHUB_WORKSPACE/.venv/bin/python" cargo test --workspace --locked
+        working-directory: qcl
+      - run: VIRTUAL_ENV="$PWD/.venv" .venv/bin/maturin develop --manifest-path qcl/Cargo.toml
+      - run: .venv/bin/ruff check qcl/python qcl/tests qcl/apps src/chemflow/agent/qcl.py src/chemflow/agent/memory.py src/chemflow/cli.py tests/test_qcl_agent.py
+      - run: OMP_NUM_THREADS=1 .venv/bin/python -m pytest qcl/tests tests/test_qcl_agent.py tests/test_kernel.py tests/test_physics.py tests/test_p2_build.py -q

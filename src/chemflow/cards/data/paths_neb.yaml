@@ -1,0 +1,9 @@
+id: paths_neb
+target: chemflow.neb_path@1
+template: neb_path
+relation: approximate
+subgraph: [neb_path]
+hyperparameters: {interpolation: [linear, idpp], optimizer: [fire, bfgs], method: [hf, dft, gfn2]}
+backends: {optimizer: [cpu_numeric]}
+failure_modes: [atom mapping must be supplied, local path, endpoint geometries not optimized]
+status: experimental

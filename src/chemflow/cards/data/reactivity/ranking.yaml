@@ -1,0 +1,11 @@
+id: app_c_ranking
+target: chemflow.ranking@1
+template: app_c_ranking
+relation: approximate
+subgraph: [app_component_energy, ranking]
+hyperparameters: {quantity: energy}
+backends: {solver: [cpu_numeric]}
+known_controls: [hf, mp2, ccsd_t, fci]
+evidence: []
+failure_modes: [different formula or charge, unresolved gaps, FCI determinant cap]
+status: experimental

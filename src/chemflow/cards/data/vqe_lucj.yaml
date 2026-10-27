@@ -1,0 +1,17 @@
+id: vqe_lucj
+target: chemflow.ground_energy@1
+template: vqe_sampled
+relation: stochastic_estimate
+subgraph: [prepare_lucj, sample, minimize, sample]
+hyperparameters: {ansatz: lucj, optimizer: [cobyla, spsa], shots_per_group: 1024, max_evaluations: 60, seed: 0}
+backends: {solver: [vqe_shots_ideal, vqe_aer_mq02, vqe_lqcloud]}
+known_controls: [fci, hf]
+evidence:
+  - path: evidence/hybrid-pulse-chemistry/report/HSQD_SCALING_20261008.md
+    sha256: 51ff16dfa4e76033d52a5626c8e978d895b813d2810e177a25b9b888871c0842
+    date: '2026-10-08'
+    outcome: inconclusive
+    summary: Fitted circuits hit iteration limits; no convergence claim.
+    quote: '不能标为已收敛拟合。'
+failure_modes: ["vqe_sampled is deployable on MQ02; statevector VQE remains verification-only", symmetry saddle point, insufficient local Jastrow couplings]
+status: experimental

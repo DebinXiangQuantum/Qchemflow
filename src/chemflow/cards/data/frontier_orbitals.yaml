@@ -1,0 +1,11 @@
+id: frontier_orbitals
+target: chemflow.frontier_orbitals@1
+template: frontier_orbitals
+pack: properties
+relation: equivalent
+subgraph: [frontier_orbitals]
+hyperparameters: {quantity: gap, spin: alpha, level: {method: hf, functional: null, dispersion: null}}
+backends: {frontier_orbitals: [cpu_numeric]}
+known_controls: []
+failure_modes: [model-defined orbital gap is not a fundamental gap, requires occupied and virtual orbitals]
+status: experimental

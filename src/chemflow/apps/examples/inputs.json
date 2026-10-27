@@ -1,0 +1,155 @@
+{
+  "ground_state_energy": {
+    "active": {
+      "n_elec": 2,
+      "n_orb": 2
+    },
+    "sector": {
+      "n_alpha": 1,
+      "n_beta": 1,
+      "n_orb": 2
+    },
+    "molecule": {
+      "atoms": "H 0 0 0; H 0 0 0.74"
+    }
+  },
+  "bond_dissociation": {
+    "molecule": {
+      "atoms": "H 0 0 0; H 0 0 0.74"
+    }
+  },
+  "solvation_scan": {
+    "molecule": {
+      "atoms": "H 0 0 0; H 0 0 0.74"
+    }
+  },
+  "frontier_orbitals": {
+    "molecule": {
+      "atoms": "H 0 0 0; H 0 0 0.74"
+    }
+  },
+  "stability_ranking": {
+    "items": [
+      {
+        "name": "HCN",
+        "molecule": {
+          "atoms": "C 0 0 0; N 0 0 1.16; H 0 0 -1.07"
+        }
+      },
+      {
+        "name": "HNC",
+        "molecule": {
+          "atoms": "C 0 0 0; N 0 0 1.17; H 0 0 2.17"
+        }
+      }
+    ]
+  },
+  "conformer_ranking": {
+    "smiles": "OO"
+  },
+  "pes_scan": {
+    "molecule": {
+      "atoms": "H 0 0 0; H 0 0 0.74"
+    },
+    "coordinate": {
+      "type": "bond",
+      "atoms": [
+        0,
+        1
+      ],
+      "values": [
+        0.7,
+        0.9,
+        1.1
+      ]
+    }
+  },
+  "metabolic_sites": {
+    "molecule": {
+      "atoms": "C 0 0 0; H 0.63 0.63 0.63; H -0.63 -0.63 0.63; H -0.63 0.63 -0.63; H 0.63 -0.63 -0.63"
+    }
+  },
+  "aqueous_solubility": {
+    "smiles": "CCO"
+  },
+  "reaction_barrier": {
+    "product": {
+      "atoms": "C 0 0 0; N 0 0 1.17; H 0 0 2.17"
+    },
+    "species": [
+      {
+        "name": "reactant",
+        "molecule": {
+          "atoms": "C 0 0 0; N 0 0 1.16; H 0 0 -1.07"
+        },
+        "coefficient": -1,
+        "role": "minimum",
+        "active": {
+          "n_elec": 4,
+          "n_orb": 4
+        },
+        "sector": {
+          "n_alpha": 2,
+          "n_beta": 2,
+          "n_orb": 4
+        }
+      },
+      {
+        "name": "saddle",
+        "molecule": {
+          "atoms": "C 0 0 0; N 0 0 1.2; H 1.1 0 .5"
+        },
+        "coefficient": 1,
+        "role": "ts",
+        "active": {
+          "n_elec": 4,
+          "n_orb": 4
+        },
+        "sector": {
+          "n_alpha": 2,
+          "n_beta": 2,
+          "n_orb": 4
+        }
+      }
+    ]
+  },
+  "dimer_binding_scan": {
+    "molecule": {
+      "atoms": "H 0 0 0; H 0 0 0.74; H 3 0 0; H 3 0 0.74"
+    },
+    "fragments": [
+      [
+        0,
+        1
+      ],
+      [
+        2,
+        3
+      ]
+    ]
+  },
+  "protein_ligand_binding": {
+    "receptor": {
+      "example_file": "181L.pdb"
+    },
+    "ligand": {
+      "residue": "BNZ",
+      "smiles": "c1ccccc1"
+    }
+  },
+  "lattice_superconductivity": {
+    "lattice": {
+      "model": "hubbard",
+      "geometry": "chain",
+      "n_sites": 2,
+      "t": 1.0,
+      "U": 4.0,
+      "unit": "hartree"
+    },
+    "sector": {
+      "n_alpha": 1,
+      "n_beta": 1,
+      "n_orb": 2
+    }
+  }
+}

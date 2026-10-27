@@ -1,0 +1,9 @@
+id: paths_rate
+target: chemflow.rate_constant@1
+template: rate_constant
+relation: approximate
+subgraph: [rate_constant]
+hyperparameters: {tunnelling: [null, wigner], frequency_unit: cm^-1, barrier_unit: hartree}
+backends: {evaluation: [cpu_numeric]}
+failure_modes: [Eyring model rather than measured kinetics, Wigner requires a supplied imaginary frequency]
+status: experimental

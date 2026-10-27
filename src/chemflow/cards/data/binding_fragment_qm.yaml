@@ -1,0 +1,12 @@
+id: binding_fragment_qm
+target: chemflow.fragment_interaction@1
+template: binding_fragment_qm
+relation: approximate
+subgraph: [pocket, fragment_interaction]
+hyperparameters: {level: {method: hf}, basis: sto-3g, counterpoise: true}
+backends: {fragment_interaction: [cpu_numeric]}
+known_controls: []
+evidence: []
+failure_modes: [pairwise additivity, absent backbone and solvent, cap artifacts,
+                metals and strongly correlated residues require an explicit SQD active region]
+status: experimental

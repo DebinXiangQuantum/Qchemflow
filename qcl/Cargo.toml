@@ -1,0 +1,20 @@
+[workspace]
+members = [".", "crates/qcl-ir", "crates/qcl-check", "crates/qcl-cluster", "crates/qcl-ci"]
+resolver = "2"
+
+[package]
+name = "qcl-py"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "_qcl"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = "0.29.2"
+qcl-check = { path = "crates/qcl-check" }
+qcl-cluster = { path = "crates/qcl-cluster" }
+qcl-ci = { path = "crates/qcl-ci" }
+qcl-ir = { path = "crates/qcl-ir" }
+serde_json = "1"

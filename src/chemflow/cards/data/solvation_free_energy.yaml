@@ -1,0 +1,11 @@
+id: solvation_free_energy
+target: chemflow.solvation_free_energy@1
+template: solvation_free_energy
+pack: properties
+relation: equivalent
+subgraph: [solvation_free_energy]
+hyperparameters: {level: {method: dft, functional: b3lyp, dispersion: null}, solvent: {model: pcm, eps: 78.3553}}
+backends: {solvation_free_energy: [cpu_numeric]}
+known_controls: []
+failure_modes: [model-defined not experimental, PCM electrostatic only, SMD requires compiled PySCF support]
+status: experimental

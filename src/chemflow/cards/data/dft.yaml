@@ -1,0 +1,11 @@
+id: dft
+target: chemflow.ground_energy@1
+template: dft
+pack: properties
+relation: approximate
+subgraph: [hamiltonian, ground_energy]
+hyperparameters: {functional: b3lyp, dispersion: null}
+backends: {ground_energy: [cpu_numeric]}
+known_controls: [hf, fci]
+failure_modes: [no ordering law, full molecular space only, functional-dependent bias]
+status: experimental

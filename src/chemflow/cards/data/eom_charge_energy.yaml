@@ -1,0 +1,11 @@
+id: eom_charge_energy
+target: chemflow.eom_charge_energy@1
+template: eom_charge_energy
+pack: properties
+relation: approximate
+subgraph: [eom_charge_energy]
+hyperparameters: {kind: ionization_energy, final_spin: 0.5}
+backends: {eom_charge_energy: [cpu_numeric]}
+known_controls: [fci, hf, ccsd_t]
+failure_modes: [closed-shell initial reference only, final doublet only, no ordering law]
+status: experimental

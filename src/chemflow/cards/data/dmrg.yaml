@@ -1,0 +1,12 @@
+id: dmrg_block2
+target: chemflow.ground_energy@1
+template: dmrg
+pack: materials
+relation: variational_upper_bound
+subgraph: [lattice_model, ground_energy]
+hyperparameters: {bond_dimension: [64, 128], sweeps: [10, 20]}
+backends: {dmrg: [cpu_numeric]}
+known_controls: [fci_pyscf]
+evidence: []
+failure_modes: [finite bond dimension, sweep convergence, no exported dense MPS vector]
+status: experimental

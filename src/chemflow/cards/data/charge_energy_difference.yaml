@@ -1,0 +1,11 @@
+id: charge_energy_difference
+target: chemflow.charge_energy_difference@1
+template: charge_energy_difference
+pack: properties
+relation: approximate
+subgraph: [hamiltonian, ground_energy, charge_energy_difference]
+hyperparameters: {final_spin: 0.5}
+backends: {ground_energy: [cpu_numeric]}
+known_controls: [hf, ccsd_t, eom_charge_energy, fci]
+failure_modes: [FCI determinant cap, vertical energies only, approximate differences have no ordering law]
+status: experimental

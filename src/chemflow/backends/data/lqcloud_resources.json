@@ -1,0 +1,83 @@
+{
+  "MQ02": {
+    "source": "Reviewer-fitted from hybrid-pulse-chemistry/report/job_ledger.csv; 3773 completed MQ02 jobs, 2026-09-25..2026-10-08; 16 failures of 3789 jobs; R1 user decision 2026-10-11",
+    "completed_jobs": 3773,
+    "failed_jobs": 16,
+    "total_jobs": 3789,
+    "device_linear_fit": {
+      "intercept_s": 0.709,
+      "seconds_per_shot": 0.0003985
+    },
+    "table": [
+      {
+        "shots": 1024,
+        "device_median_s": 1.11,
+        "device_p90_s": 1.5,
+        "wall_median_s": 3.32,
+        "wall_p90_s": 3.46,
+        "wall_p99_s": 6.73,
+        "device_p99_s": 3.1277465,
+        "device_max_s": 3.17065
+      },
+      {
+        "shots": 2048,
+        "device_median_s": 1.15,
+        "device_p90_s": 1.95,
+        "wall_median_s": 3.36,
+        "wall_p90_s": 3.57,
+        "wall_p99_s": 6.87,
+        "device_p99_s": 4.062796000000001,
+        "device_max_s": 34.1072
+      },
+      {
+        "shots": 4096,
+        "device_median_s": 2.24,
+        "device_p90_s": 2.77,
+        "wall_median_s": 3.53,
+        "wall_p90_s": 6.83,
+        "wall_p99_s": 9.92,
+        "device_p99_s": 6.128783299999999,
+        "device_max_s": 9.85304
+      },
+      {
+        "shots": 8192,
+        "device_median_s": 3.93,
+        "device_p90_s": 7.7,
+        "wall_median_s": 6.92,
+        "wall_p90_s": 10.34,
+        "wall_p99_s": 13.74,
+        "device_p99_s": 9.447284499999997,
+        "device_max_s": 9.7934
+      },
+      {
+        "shots": 32768,
+        "device_median_s": 13.08,
+        "device_p90_s": 16.44,
+        "wall_median_s": 17.18,
+        "wall_p90_s": 20.56,
+        "wall_p99_s": 24.17,
+        "device_p99_s": 21.008949000000012,
+        "device_max_s": 24.5183
+      }
+    ],
+    "tail_sources": [
+      {
+        "path": "/Volumes/macsoftware/codes/quantumcomputing/quantumchemistry/hybrid-pulse-chemistry/report/job_ledger.csv",
+        "selection": "completed MQ02 jobs with platform_execution_s, grouped by shots",
+        "quantile": "numpy.quantile 0.99, linear interpolation"
+      },
+      {
+        "date": "2026-10-12",
+        "job_id": "task_85274812218d4d0a",
+        "shots": 2048,
+        "device_s": 34.1072
+      },
+      {
+        "date": "2026-10-13",
+        "job_id": "task_aab8ae580b6d4faf",
+        "shots": 2048,
+        "device_s": 1.02351
+      }
+    ]
+  }
+}

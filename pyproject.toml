@@ -1,0 +1,108 @@
+[project]
+name = "chemflow"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "pydantic>=2",
+    "numpy",
+    "scipy",
+    "pyscf==2.14.0",
+    "pyyaml",
+    "cryptography>=50.0.2",
+]
+
+[project.optional-dependencies]
+apps = ["chemflow[paths,reactivity,binding,quantum]"]
+binding-tools = ["pdbfixer", "openff-toolkit", "openmmforcefields", "chemflow[binding]"]
+dmrg = ["block2==0.5.4"]
+dft = ["dftd4", "dftd3"]
+paths = [
+    "sella>=2.3",
+    "chemflow[reactions,drug,xtb]",
+]
+binding = [
+    "rdkit>=2024.3",
+    "openmm>=8.1",
+    "propka>=3.5",
+]
+llm = [
+    "anthropic>=1.13.0",
+]
+openai = [
+    "openai>=3.28.0",
+    "socksio>=1.0",  # SOCKS proxies for live LLM calls (httpx)
+]
+mcp = [
+    "mcp>=2.3.0",
+]
+quantum = [
+    "qiskit>=2.1,<3",
+    "qiskit-aer>=0.17.2",
+]
+qpu = [
+    "chemflow[quantum]",
+    "lqcloud==0.5.1",
+]
+gpu = [
+    "cupy-cuda12x>=14; sys_platform == 'linux'",
+    "gpu4pyscf-cuda12x==1.8.1; sys_platform == 'linux'",
+]
+reactions = [
+    "geometric>=1.1",
+]
+mm = [
+    "openmm>=8.1",
+]
+drug = [
+    "rdkit>=2024.3",
+]
+reactivity = [
+    "chemflow[drug,xtb]",
+    "freesasa>=2.2",
+]
+docking = [
+    "chemflow[drug]",
+    "meeko>=0.6",
+    "gemmi>=0.7",  # meeko 0.8 imports gemmi without declaring it (R85)
+    "vina>=1.2.7; sys_platform == 'linux'",
+]
+xtb = [
+    "tblite>=0.7",  # GFN2-xTB (G2)
+    "ase>=3.23",
+]
+mlp = [
+    "mace-torch>=0.3.16",  # MACE-MP-0 small; weights via CHEMFLOW_MACE_MODEL (G2)
+    "ase>=3.23",
+]
+
+[project.scripts]
+chemflow-mcp = "chemflow.mcp:main"
+chemflow = "chemflow.cli:main"
+chemflow-hook = "chemflow.hooks:main"
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel.force-include]
+"plugin" = "chemflow/plugin"
+"src/chemflow/eval/suites" = "chemflow/eval/suites"
+"src/chemflow/data/esol" = "chemflow/data/esol"
+"src/chemflow/apps/examples" = "chemflow/apps/examples"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# Research notes, the archived reference scripts, pinned evidence and run outputs are
+# kept as recorded, not linted.
+extend-exclude = ["docs/research", "reference", "evidence", "runs"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/test_review_m0.py" = ["B017"]

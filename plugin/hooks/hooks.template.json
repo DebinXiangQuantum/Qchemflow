@@ -1,0 +1,9 @@
+{
+  "PreToolUse": "chemflow-hook",
+  "PostToolUse": "chemflow-hook",
+  "Stop": "chemflow-hook",
+  "before_tool": "chemflow-hook",
+  "after_tool": "chemflow-hook",
+  "pre_tool_call": "chemflow-hook",
+  "post_tool_call": "chemflow-hook"
+}

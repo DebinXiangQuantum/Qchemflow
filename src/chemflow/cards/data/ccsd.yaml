@@ -1,0 +1,17 @@
+id: ccsd
+target: chemflow.ground_energy@1
+template: ccsd
+relation: approximate
+subgraph: [scf, cluster_optimization]
+hyperparameters: {}
+backends: {solver: [cpu_numeric]}
+known_controls: [fci]
+evidence:
+  - path: evidence/hybrid-pulse-chemistry/report/HSQD_SCREEN_20261008.md
+    sha256: 1c82832ccf358e1c46ca68983113e149d713458be3604936677e87762ac171d1
+    date: '2026-10-08'
+    outcome: failed
+    summary: CCSD control had 34.592 mHa absolute error on the screened system.
+    quote: '绝对误差34.592mHa；CCSD不是变分上界。'
+failure_modes: [strong correlation]
+status: experimental

@@ -1,0 +1,11 @@
+id: vqe_uccsd
+target: chemflow.ground_energy@1
+template: vqe_sampled
+relation: stochastic_estimate
+subgraph: [prepare_uccsd, sample, minimize, sample]
+hyperparameters: {ansatz: uccsd, optimizer: [cobyla, spsa], shots_per_group: 1024, max_evaluations: 60, seed: 0}
+backends: {solver: [vqe_shots_ideal, vqe_aer_mq02, vqe_lqcloud]}
+known_controls: [fci, hf]
+evidence: []
+failure_modes: ["vqe_sampled is deployable on MQ02; statevector VQE remains verification-only", optimizer local minimum, shot noise removes upper bound]
+status: experimental

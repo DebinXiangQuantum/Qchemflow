@@ -1,0 +1,11 @@
+id: app_c_bond_dissociation
+target: chemflow.bond_dissociation@1
+template: app_c_bond_dissociation
+relation: approximate
+subgraph: [enumerate_bonds, homolysis, app_component_energy, bond_dissociation]
+hyperparameters: {fragments: rigid}
+backends: {solver: [cpu_numeric]}
+known_controls: [hf, mp2, ccsd_t, fci]
+evidence: []
+failure_modes: [ring cleavage, charged parent, FCI determinant cap]
+status: experimental

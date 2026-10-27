@@ -1,0 +1,12 @@
+id: binding_mmgbsa
+target: chemflow.mmgbsa@1
+template: binding_mmgbsa
+relation: equivalent
+subgraph: [protein_structure, ligand_structure, complex, ligand_parameters, mmgbsa]
+hyperparameters: {frames: 0, minimize: false, forcefield: gaff-2.11}
+backends: {mmgbsa: [cpu_numeric]}
+known_controls: [binding_mmgbsa]
+evidence: []
+failure_modes: [model_change relative to experimental binding free energy, no entropy correction,
+                protonation and pose uncertainty, short correlated trajectories]
+status: experimental

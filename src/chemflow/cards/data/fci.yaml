@@ -1,0 +1,11 @@
+id: fci
+target: chemflow.ground_energy@1
+template: fci
+relation: equivalent
+subgraph: [sector_diagonalization]
+hyperparameters: {}
+backends: {diagonalization: [cpu_numeric]}
+known_controls: [pyscf_fci]
+evidence: []
+failure_modes: [sector dimension grows combinatorially]
+status: experimental

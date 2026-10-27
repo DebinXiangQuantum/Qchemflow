@@ -1,0 +1,15 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "qcl-chemistry"
+version = "0.1.0"
+requires-python = ">=3.11"
+description = "Python-embedded quantum chemistry workflows"
+dependencies = ["chemflow==0.1.0", "pyscf==2.14.0", "opt_einsum>=3.4,<4"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "qcl._qcl"
+features = ["pyo3/extension-module"]

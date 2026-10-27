@@ -1,0 +1,12 @@
+id: allen_dynes_tc
+target: chemflow.allen_dynes_tc@1
+template: allen_dynes_tc
+pack: materials
+relation: approximate
+subgraph: [allen_dynes_tc]
+hyperparameters: {}
+backends: {model: [cpu_numeric]}
+known_controls: []
+evidence: []
+failure_modes: [conventional phonon model only, requires user or EPW inputs, strong coupling]
+status: experimental

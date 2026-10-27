@@ -1,0 +1,10 @@
+id: paths_interaction
+target: chemflow.interaction_scan@1
+template: interaction_scan
+relation: approximate
+subgraph: [geometry_transform, scan_fragment, component_energy, scan_interaction, interaction_scan]
+hyperparameters: {counterpoise: [true, false], method: [hf, mp2, ccsd, ccsd_t, fci]}
+backends: {solver: [cpu_numeric]}
+known_controls: [fci]
+failure_modes: [not a binding free energy, rigid neutral closed-shell dimers only]
+status: experimental

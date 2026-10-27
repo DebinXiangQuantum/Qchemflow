@@ -1,0 +1,499 @@
+name: core
+tasks:
+- id: h2-ground
+  category: molecular
+  spec:
+    question: Evaluate h2-ground against classical controls
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0; H 0 0 0.74
+      electronic_model:
+        basis: sto-3g
+      active:
+        n_elec: 2
+        n_orb: 2
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 2
+      target_spin: 0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 180
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.137283834488502
+    decision_in:
+    - stop
+    - escalate
+  reference_source: Direct PySCF RHF then FCI, H2 at 0.74 angstrom, STO-3G, 2e/2o
+    singlet. Recompute with scripts/eval_reference_values.py.
+- id: h2-stretched
+  category: molecular
+  spec:
+    question: Evaluate h2-stretched against classical controls
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0; H 0 0 1.5
+      electronic_model:
+        basis: sto-3g
+      active:
+        n_elec: 2
+        n_orb: 2
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 2
+      target_spin: 0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 180
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -0.9981493534714099
+    decision_in:
+    - stop
+    - escalate
+  reference_source: Direct PySCF RHF then FCI, H2 at 1.5 angstrom, STO-3G, 2e/2o singlet.
+    Recompute with scripts/eval_reference_values.py.
+- id: h2-compressed
+  category: molecular
+  spec:
+    question: Evaluate compressed H2 against classical controls
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0; H 0 0 0.6
+      electronic_model:
+        basis: sto-3g
+      active:
+        n_elec: 2
+        n_orb: 2
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 2
+      target_spin: 0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 180
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.1162860068695404
+    decision_in:
+    - stop
+    - escalate
+  reference_source: Direct PySCF RHF then FCI, H2 at 0.6 angstrom, STO-3G, 2e/2o singlet.
+    Recompute with scripts/eval_reference_values.py.
+- id: h2-atomization
+  category: reaction
+  spec:
+    question: Evaluate h2-atomization against classical controls
+    target:
+      kind: reaction_energy
+      electronic_model: &id001
+        basis: sto-3g
+      species:
+      - name: H2
+        molecule:
+          atoms: H 0 0 0; H 0 0 0.74
+        coefficient: -1
+        active:
+          n_elec: 2
+          n_orb: 2
+        sector:
+          n_alpha: 1
+          n_beta: 1
+          n_orb: 2
+        target_spin: 0
+      - name: H
+        molecule:
+          atoms: H 0 0 0
+          spin: 1
+        coefficient: 2
+        active:
+          n_elec: 1
+          n_orb: 1
+        sector:
+          n_alpha: 1
+          n_beta: 0
+          n_orb: 1
+        target_spin: 0.5
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 180
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.20412013537395146
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF: twice isolated spin-1 H UHF/FCI minus H2 RHF/FCI
+    at 0.74 angstrom, STO-3G. Recompute with scripts/eval_reference_values.py.'
+- id: hubbard-ring6
+  category: lattice
+  spec:
+    question: Evaluate a six-site half-filled Hubbard ring
+    target:
+      kind: lattice_ground_energy
+      lattice:
+        model: hubbard
+        geometry: ring
+        n_sites: 6
+        t: 1.0
+        U: 4.0
+        unit: hartree
+      sector:
+        n_alpha: 3
+        n_beta: 3
+        n_orb: 6
+      target_spin: 0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 180
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -3.668706178872962
+    decision_in:
+    - stop
+    - escalate
+  reference_source: Independent 400x400 dense Fock-sector Hubbard ring Hamiltonian,
+    six sites, 3 alpha/3 beta electrons, t=1 and U=4 hartree, periodic nearest-neighbor
+    hopping. Recompute with scripts/eval_reference_values.py; no ChemFlow operators.
+- id: impurity-spectral
+  category: spectral
+  spec:
+    question: Evaluate impurity-spectral against classical controls
+    target:
+      kind: spectral_function
+      model:
+        impurity_model:
+          U: 2.0
+          eps_bath:
+          - 0.0
+          t_bath:
+          - 0.5
+          unit: hartree
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 2
+      orbital: 0
+      spin: alpha
+      omega:
+        start: -4.0
+        stop: 4.0
+        n: 101
+        unit: hartree
+      eta: 0.1
+    gates:
+    - kind: l1_error_vs_exact
+      threshold: 0.1
+      unit: dimensionless
+    - kind: relation_at_least
+      relation: equivalent
+    budget:
+      wall_s: 180
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.9829844062427656
+    decision_in:
+    - stop
+    - escalate
+  reference_source: Independent 16x16 full-Fock Jordan-Wigner dense diagonalization
+    and Lehmann sum. The legacy value_hartree field is the DIMENSIONLESS trapezoidal
+    integral of impurity alpha A(omega) over the declared 101-point [-4,4] hartree
+    grid, eta=0.1; not an energy or infinite-window sum rule. Scored against the reference
+    result database sum_rule. Recompute with scripts/eval_reference_values.py.
+- id: h2-counterpoise
+  category: interaction
+  spec:
+    question: Evaluate h2-counterpoise against classical controls
+    target:
+      kind: interaction_energy
+      complex:
+        atoms: H 0 0 0; H 0 0 0.74; H 0 0 3.0; H 0 0 3.74
+      fragments:
+      - - 0
+        - 1
+      - - 2
+        - 3
+      electronic_model:
+        basis: sto-3g
+      counterpoise: true
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 180
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.0006856015684066907
+    decision_in:
+    - stop
+    - escalate
+  reference_source: 'Direct PySCF RHF/FCI: H4 complex minus each H2 fragment in full
+    complex STO-3G basis using ghost-H centers; collinear H2 molecules separated by
+    3 angstrom. Recompute with scripts/eval_reference_values.py.'
+- id: hcn-hnc-enthalpy
+  category: thermo
+  spec:
+    question: Evaluate HCN to HNC isomerization enthalpy at 298.15 K
+    target:
+      kind: reaction_energy
+      electronic_model: *id001
+      species:
+      - name: HCN
+        molecule:
+          atoms: H 0 0 -1.065; C 0 0 0; N 0 0 1.156
+        coefficient: -1
+        active:
+          n_elec: 4
+          n_orb: 4
+        sector:
+          n_alpha: 2
+          n_beta: 2
+          n_orb: 4
+        target_spin: 0
+      - name: HNC
+        molecule:
+          atoms: H 0 0 -0.995; N 0 0 0; C 0 0 1.170
+        coefficient: 1
+        active:
+          n_elec: 4
+          n_orb: 4
+        sector:
+          n_alpha: 2
+          n_beta: 2
+          n_orb: 4
+        target_spin: 0
+      thermo:
+        quantity: enthalpy
+        temperature_K: 298.15
+        pressure_Pa: 101325
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: approximate
+    budget:
+      wall_s: 180
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: 0.09430291605178809
+    decision_in:
+    - stop
+    - escalate
+  reference_source: Direct PySCF RHF/STO-3G with independent scipy Nelder-Mead minimization
+    of both linear bond lengths; analytic PySCF Hessian and harmonic_analysis; canonical-HF
+    CASCI(4e,4o), five frozen occupied orbitals. Independent ideal-gas RRHO enthalpy
+    7kT/2 plus harmonic vibrational energy including ZPE; HNC minus HCN at 298.15
+    K. The 1e-6 Ha tolerance accommodates independent geometry minimization and active-space
+    orbital sensitivity. Recompute with scripts/eval_reference_values.py; no ChemFlow
+    pipeline calls.
+- id: h4-selection-1p5
+  category: selection
+  spec:
+    question: Select a gate-passing method for linear H4 at 1.5 angstrom spacing
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0.0; H 0 0 1.5; H 0 0 3.0; H 0 0 4.5
+      electronic_model:
+        basis: sto-3g
+      active:
+        n_elec: 4
+        n_orb: 4
+      sector:
+        n_alpha: 2
+        n_beta: 2
+        n_orb: 4
+      target_spin: 0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 180
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.9961503255188093
+    decision_in:
+    - stop
+    - escalate
+  reference_source: Direct PySCF RHF then full FCI, linear H4 with consecutive H-H
+    distances 1.5 angstrom, STO-3G, 4e/4o singlet. Selection compares SCI, fixed-seed
+    sampled SQD, and short-run VQE under the unchanged 0.0016 hartree gate. Recompute
+    with scripts/eval_reference_values.py.
+- id: h4-selection-2p0
+  category: selection
+  spec:
+    question: Select a gate-passing method for linear H4 at 2.0 angstrom spacing
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0.0; H 0 0 2.0; H 0 0 4.0; H 0 0 6.0
+      electronic_model:
+        basis: sto-3g
+      active:
+        n_elec: 4
+        n_orb: 4
+      sector:
+        n_alpha: 2
+        n_beta: 2
+        n_orb: 4
+      target_spin: 0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 180
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.897780645989874
+    decision_in:
+    - escalate
+  reference_source: Direct PySCF RHF then full FCI, linear H4 with consecutive H-H
+    distances 2.0 angstrom, STO-3G, 4e/4o singlet. Selection compares SCI, fixed-seed
+    sampled SQD, and short-run VQE under the unchanged 0.0016 hartree gate. Recompute
+    with scripts/eval_reference_values.py.
+- id: h2-budget-refusal
+  category: refusal
+  spec:
+    question: Refuse the H2 screening plan before execution under a zero wall-time
+      budget
+    target:
+      kind: molecular_ground_energy
+      molecule:
+        atoms: H 0 0 0; H 0 0 0.74
+      electronic_model:
+        basis: sto-3g
+      active:
+        n_elec: 2
+        n_orb: 2
+      sector:
+        n_alpha: 1
+        n_beta: 1
+        n_orb: 2
+      target_spin: 0
+    gates:
+    - kind: abs_error_vs_exact
+      threshold: 0.0016
+      unit: hartree
+    - kind: relation_at_least
+      relation: variational_upper_bound
+    budget:
+      wall_s: 0
+      sim_shots: 100000
+      qpu_s: 0
+      qpu_shots: 0
+    allowed_effects:
+    - pure
+    - simulator
+    decision: Choose a supported method without changing the signed target
+  expected:
+    value_hartree: -1.137283834488502
+    decision_in:
+    - refused
+    outcome: refused
+    refusal_code: CF-E070
+  reference_source: Direct PySCF RHF then FCI, H2 at 0.74 angstrom, STO-3G, 2e/2o
+    singlet. Recompute with scripts/eval_reference_values.py. The electronic value
+    remains independently recomputed for provenance; the scored outcome is CF-E070
+    before any plan execution under the zero wall-time budget, not an energy answer.

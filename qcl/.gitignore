@@ -1,0 +1,4 @@
+/target/
+/python/qcl/*.so
+/python/qcl/*.pyd
+/.venv/

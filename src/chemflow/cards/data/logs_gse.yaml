@@ -1,0 +1,19 @@
+id: logs_gse
+target: chemflow.logs_gse@1
+template: logs_gse
+relation: equivalent
+subgraph: [logs_gse]
+hyperparameters:
+  model: gse
+  model_card: chemflow.empirical.model_card("gse")
+  source: https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/delaney-processed.csv
+  licence_note: "Delaney, J. Chem. Inf. Comput. Sci. 2004, 44, 1000; via MoleculeNet. Redistributed research dataset; no separate dataset licence is asserted."
+backends: {logs_gse: [cpu_numeric]}
+known_controls: [logs_esol]
+evidence: []
+failure_modes:
+  - Requires melting point in Celsius, clamped at 25 C.
+  - No GSE train or CV RMSE because the bundled dataset lacks melting points.
+  - Uses ESOL structural applicability as a proxy, not an independently validated GSE domain.
+  - Model estimate of experimental solubility (model_change).
+status: experimental

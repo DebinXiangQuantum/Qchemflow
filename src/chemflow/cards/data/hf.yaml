@@ -1,0 +1,11 @@
+id: hf
+target: chemflow.ground_energy@1
+template: hf
+relation: variational_upper_bound
+subgraph: [scf]
+hyperparameters: {}
+backends: {scf: [cpu_numeric]}
+known_controls: [fci]
+evidence: []
+failure_modes: [single determinant misses correlation]
+status: experimental

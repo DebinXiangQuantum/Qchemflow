@@ -1,0 +1,9 @@
+id: paths_constrained
+target: chemflow.constrained_optimize@1
+template: constrained_optimize
+relation: approximate
+subgraph: [constrained_optimize]
+hyperparameters: {method: [hf, dft, gfn2]}
+backends: {optimizer: [cpu_numeric]}
+failure_modes: [local rather than global minima, inconsistent constraints, unconverged optimization]
+status: experimental

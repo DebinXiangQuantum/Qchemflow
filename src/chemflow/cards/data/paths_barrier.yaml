@@ -1,0 +1,10 @@
+id: paths_barrier
+target: chemflow.reaction_energy@1
+template: reaction_barrier
+relation: approximate
+subgraph: [connected_ts, frequencies, ground_energy, reaction_energy]
+hyperparameters: {quantity: [electronic, gibbs], stationary_level: hf}
+backends: {solver: [cpu_numeric]}
+known_controls: [fci]
+failure_modes: [local barrier only, atom-mapped supermolecules required, harmonic thermochemistry]
+status: experimental

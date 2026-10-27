@@ -1,0 +1,11 @@
+[package]
+name = "qcl-check"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+qcl-ir = { path = "../qcl-ir" }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"

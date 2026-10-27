@@ -1,0 +1,11 @@
+id: ccsd_t
+target: chemflow.ground_energy@1
+template: ccsd_t
+relation: approximate
+subgraph: [scf, cluster_optimization, perturbative_triples]
+hyperparameters: {}
+backends: {solver: [cpu_numeric]}
+known_controls: [fci]
+evidence: []
+failure_modes: [near-degenerate references]
+status: experimental

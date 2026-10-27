@@ -1,0 +1,17 @@
+id: adapt_vqe
+target: chemflow.ground_energy@1
+template: adapt_vqe
+relation: variational_upper_bound
+subgraph: [gradient_screening, prepare, expectation, minimize]
+hyperparameters: {threshold: 0.001, max_operators: 40}
+backends: {solver: [quantum_simulator]}
+known_controls: [fci, vqe_uccsd]
+evidence:
+  - path: benchmarks/results/adapt_h4_plateau.json
+    sha256: 86c891ea18492c10b9fe7a798ede8dbf8b9e734673cf1fe162d2d16a566af8a8
+    date: '2026-10-11'
+    outcome: inconclusive
+    summary: Spin-adapted pool plateaus at 3.34 mHa with 6 operators; generalized reaches the FCI energy with 11.
+    quote: '"error_mhartree": 3.342799384357331'
+failure_modes: ["verification-only (statevector); no deployable implementation", gradient plateau, incomplete operator pool]
+status: experimental

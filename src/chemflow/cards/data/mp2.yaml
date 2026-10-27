@@ -1,0 +1,11 @@
+id: mp2
+target: chemflow.ground_energy@1
+template: mp2
+relation: approximate
+subgraph: [scf, perturbation]
+hyperparameters: {}
+backends: {solver: [cpu_numeric]}
+known_controls: [fci]
+evidence: []
+failure_modes: [near-degenerate references]
+status: experimental

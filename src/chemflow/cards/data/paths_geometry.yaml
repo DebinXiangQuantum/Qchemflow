@@ -1,0 +1,9 @@
+id: paths_geometry
+target: chemflow.geometry_transform@1
+template: geometry_transform
+relation: approximate
+subgraph: [geometry_transform]
+hyperparameters: {operation: [set_bond, set_angle, set_dihedral, translate_fragment]}
+backends: {geometry: [cpu_numeric]}
+failure_modes: [ambiguous ring cuts, undefined collinear angle or dihedral, incorrect bond perception]
+status: experimental
