@@ -75,7 +75,7 @@ CF-E080. The installed macOS environment exercises this refusal path.
 
 `search_routes(target, stock="zinc", iterations=100, time_limit_s=120)` runs
 `$CHEMFLOW_AIZYNTH_HOME/env/bin/aizynthcli`; default home is
-`/Volumes/macsoftware/caches/chemflow/aizynthfinder`. The isolated installation
+`$CHEMFLOW_CACHE_DIR/aizynthfinder` (by default `~/.cache/chemflow/aizynthfinder`). The isolated installation
 must be version 4.4.1 and provide `data/config.yml` and its referenced data.
 AiZynthFinder is never imported into ChemFlow's NumPy environment.
 Failed subprocesses report CF-E080 with the exit status, signal name for negative

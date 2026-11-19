@@ -28,7 +28,7 @@ molecules, and no added dispersion correction. Charged or open-shell MACE
 requests are refused: this model has no charge/spin-state input.
 
 MACE loads only the local file named by `CHEMFLOW_MACE_MODEL`, defaulting to
-`/Volumes/macsoftware/caches/chemflow/mace/mace-mp-0-small.model`. Supply trusted
+`$CHEMFLOW_CACHE_DIR/mace/mace-mp-0-small.model` (by default under `~/.cache/chemflow`). Supply trusted
 weights only; model loading uses PyTorch serialization. The energy diagnostics
 include the method and SHA-256 of the actual file. An override must still point
 to MACE-MP-0 small weights; it is not a selector for arbitrary foundation models.

@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 from scipy import constants as sc
 
+from chemflow.cache import cache_dir
 from chemflow.diagnostics import AdapterError
 from chemflow.domains.thermochemistry import ISOTOPE_MASSES
 from chemflow.registry import ImplementationSpec, OperatorSpec
@@ -16,7 +17,7 @@ from chemflow.runtime.result import ExecutionResult
 from chemflow.types import BackendKind
 
 METHODS = ("gfn2-xtb", "mace-mp-0-small")
-DEFAULT_MACE_MODEL = "/Volumes/macsoftware/caches/chemflow/mace/mace-mp-0-small.model"
+DEFAULT_MACE_MODEL = str(cache_dir() / "mace" / "mace-mp-0-small.model")
 BOHR = sc.physical_constants["Bohr radius"][0] * 1e10
 HARTREE_EV = sc.physical_constants["Hartree energy in eV"][0]
 

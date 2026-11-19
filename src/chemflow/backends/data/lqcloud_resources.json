@@ -62,7 +62,7 @@
     ],
     "tail_sources": [
       {
-        "path": "/Volumes/macsoftware/codes/quantumcomputing/quantumchemistry/hybrid-pulse-chemistry/report/job_ledger.csv",
+        "path": "hybrid-pulse-chemistry/report/job_ledger.csv",
         "selection": "completed MQ02 jobs with platform_execution_s, grouped by shots",
         "quantile": "numpy.quantile 0.99, linear interpolation"
       },

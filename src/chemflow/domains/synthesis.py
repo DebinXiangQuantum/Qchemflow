@@ -10,12 +10,13 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from chemflow.cache import cache_dir
 from chemflow.diagnostics import AdapterError
 from chemflow.types import Provenance
 
 from ._adapters import register_adapter
 
-DEFAULT_HOME = "/Volumes/macsoftware/caches/chemflow/aizynthfinder"
+DEFAULT_HOME = str(cache_dir() / "aizynthfinder")
 
 
 class RouteCandidates(BaseModel, frozen=True):
