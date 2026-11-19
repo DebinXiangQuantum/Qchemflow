@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "lean_toolchain": "leanprover/lean4:v4.15.0",
+  "mathlib_revision": "9837ca9d65d9de6fad1ef4381750ca688774e608",
+  "sources": {
+    "ChemflowFormal/Lehmann.lean": "17533f8ed1be92b3df90dc49e3a51da34ac2d931d7ec07ccb9f0af857e3a9f3c",
+    "ChemflowFormal/Smoke.lean": "64d42bc660d0b82631b2044c0e8b9848a25e2fbc2f41fbb8415ab2856251a697",
+    "ChemflowFormal/Variational.lean": "56f6bcd1222e2e7b108c992aa7cc3c16e0e7569193ed57d6aef640c1a1616bf8",
+    "ChemflowFormal/Weinstein.lean": "9c7b975d56c301de45d6667470d1c0490c4b32eb6e9efbb01f558d0158a8df80"
+  },
+  "project": {
+    "ChemflowFormal.lean": "da3f3f2714ba1ac142e8895833df8c2714563fa51c82b2c1f8e5a1d16de06c45",
+    "lean-toolchain": "aff3a276fcd1daa6f311e07baf168d5c0c89a3ddad4cd4e8de3e2ec779504e46",
+    "lakefile.toml": "addd67905e488da823feec16d4f6d4e8e175a9863e867b35816d625eb89d0a33",
+    "lake-manifest.json": "17dc5188c81ee81e75623bd8b297cb045ad7310dba49c3def4830723d8eec44b"
+  },
+  "theorems": [
+    {
+      "name": "ChemflowFormal.exact_diagonalization",
+      "lemma": "exact_diagonalization",
+      "file": "ChemflowFormal/Variational.lean",
+      "source_sha256": "56f6bcd1222e2e7b108c992aa7cc3c16e0e7569193ed57d6aef640c1a1616bf8",
+      "lemma_sha256": "e41f67d05def4f1961d691f744fe2e59213bcd1f5d8be778b1b9a056b215aaef",
+      "statement": "theorem exact_diagonalization [Nontrivial E] (T : E →ₗ[𝕜] E)\n    (hT : T.IsSymmetric) :\n    HasEigenvalue T (ground T : 𝕜) ∧\n      ∀ μ : ℝ, HasEigenvalue T (μ : 𝕜) → ground T ≤ μ",
+      "axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ]
+    },
+    {
+      "name": "ChemflowFormal.lehmann_completeness",
+      "lemma": "lehmann_completeness",
+      "file": "ChemflowFormal/Lehmann.lean",
+      "source_sha256": "17533f8ed1be92b3df90dc49e3a51da34ac2d931d7ec07ccb9f0af857e3a9f3c",
+      "lemma_sha256": "f94d2ebad2c06927823d4417863f1ddf1deecc63069013374075cebf265316cc",
+      "statement": "theorem lehmann_completeness (H : E →ₗ[ℂ] E) (basis : OrthonormalBasis ι ℂ E)\n    (energy : ι → ℝ) (heigen : ∀ i, H (basis i) = (energy i : ℂ) • basis i)\n    (z : ℂ) (hz : ∀ i, z - (energy i : ℂ) ≠ 0) (v : E) :\n    (∃! u : E, z • u - H u = v) ∧\n    ∀ u : E, z • u - H u = v →\n      ⟪v, u⟫_ℂ = ∑ i, (Complex.normSq ⟪basis i, v⟫_ℂ : ℂ) / (z - energy i)",
+      "axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ]
+    },
+    {
+      "name": "ChemflowFormal.linear_combination_exact",
+      "lemma": "linear_combination_exact",
+      "file": "ChemflowFormal/Variational.lean",
+      "source_sha256": "56f6bcd1222e2e7b108c992aa7cc3c16e0e7569193ed57d6aef640c1a1616bf8",
+      "lemma_sha256": "2283db4dc475755131330d3aaded634734ec6bf3817df4066d797403e5dda8cb",
+      "statement": "theorem linear_combination_exact {ι : Type*} (terms : Finset ι)\n    (c x target : ι → ℝ) (h : ∀ i ∈ terms, c i ≠ 0 → x i = target i) :\n    ∑ i ∈ terms, c i * x i = ∑ i ∈ terms, c i * target i",
+      "axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ]
+    },
+    {
+      "name": "ChemflowFormal.positive_linear_combination",
+      "lemma": "positive_linear_combination",
+      "file": "ChemflowFormal/Variational.lean",
+      "source_sha256": "56f6bcd1222e2e7b108c992aa7cc3c16e0e7569193ed57d6aef640c1a1616bf8",
+      "lemma_sha256": "0118be62081ac10d14cf95896c832514c203a95d1affd6f48a9242e84da25c01",
+      "statement": "theorem positive_linear_combination {ι : Type*} (terms : Finset ι)\n    (c x target : ι → ℝ)\n    (h : ∀ i ∈ terms, x i = target i ∨ (0 ≤ c i ∧ target i ≤ x i)) :\n    ∑ i ∈ terms, c i * target i ≤ ∑ i ∈ terms, c i * x i",
+      "axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ]
+    },
+    {
+      "name": "ChemflowFormal.rayleigh_ritz",
+      "lemma": "rayleigh_ritz",
+      "file": "ChemflowFormal/Variational.lean",
+      "source_sha256": "56f6bcd1222e2e7b108c992aa7cc3c16e0e7569193ed57d6aef640c1a1616bf8",
+      "lemma_sha256": "803de59e7884eb2fab1b8b7ad269354117c1961adb1c8470963dd7ba10e6e2fa",
+      "statement": "theorem rayleigh_ritz [Nontrivial E] (T : E →ₗ[𝕜] E)\n    (hT : T.IsSymmetric) (V : Submodule 𝕜 E) [Nontrivial V] :\n    ground T ≤ ritz T V ∧\n      HasEigenvalue (compression T V) (ritz T V : 𝕜) ∧\n      ∀ μ : ℝ, HasEigenvalue (compression T V) (μ : 𝕜) → ritz T V ≤ μ",
+      "axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ]
+    },
+    {
+      "name": "ChemflowFormal.rayleigh_ritz_full",
+      "lemma": "rayleigh_ritz_full",
+      "file": "ChemflowFormal/Variational.lean",
+      "source_sha256": "56f6bcd1222e2e7b108c992aa7cc3c16e0e7569193ed57d6aef640c1a1616bf8",
+      "lemma_sha256": "3d41f234bbc2d10ae03ab92c83bdd4d9eb0a32ca0d53d25ffc32214b82cff9a9",
+      "statement": "theorem rayleigh_ritz_full [Nontrivial E] (T : E →ₗ[𝕜] E)\n    (hT : T.IsSymmetric) : ritz T ⊤ = ground T",
+      "axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ]
+    },
+    {
+      "name": "ChemflowFormal.sector_decomposition",
+      "lemma": "sector_decomposition",
+      "file": "ChemflowFormal/Variational.lean",
+      "source_sha256": "56f6bcd1222e2e7b108c992aa7cc3c16e0e7569193ed57d6aef640c1a1616bf8",
+      "lemma_sha256": "2d5f9b084bc8ac0c47b3bab02a89c3affbcd11ba6ac189da816b3e8ffd58caa3",
+      "statement": "theorem sector_decomposition (T N : E →ₗ[𝕜] E) (h : T * N = N * T)\n    (μ : 𝕜) (x : E) (hx : x ∈ eigenspace N μ) : T x ∈ eigenspace N μ",
+      "axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ]
+    },
+    {
+      "name": "ChemflowFormal.variational_principle",
+      "lemma": "variational_principle",
+      "file": "ChemflowFormal/Variational.lean",
+      "source_sha256": "56f6bcd1222e2e7b108c992aa7cc3c16e0e7569193ed57d6aef640c1a1616bf8",
+      "lemma_sha256": "1d52d6ee4cac010ed9bd9c5533c25eb4960234a61acc2fa2cb8944482401758a",
+      "statement": "theorem variational_principle [Nontrivial E] (T : E →ₗ[𝕜] E)\n    (hT : T.IsSymmetric) (x : E) (hx : x ≠ 0) :\n    HasEigenvalue T (ground T : 𝕜) ∧ ground T ≤ rayleigh T x",
+      "axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ]
+    },
+    {
+      "name": "ChemflowFormal.weinstein_bound",
+      "lemma": "weinstein_bound",
+      "file": "ChemflowFormal/Weinstein.lean",
+      "source_sha256": "9c7b975d56c301de45d6667470d1c0490c4b32eb6e9efbb01f558d0158a8df80",
+      "lemma_sha256": "8367dd9427a0a40e4ff283c080a1e2207b516a1ed751a6c1711b8dcfbf67999b",
+      "statement": "theorem weinstein_bound [FiniteDimensional ℂ E] (H : E →ₗ[ℂ] E)\n    (hH : H.IsSymmetric) (ψ : E) (hψ : ‖ψ‖ = 1) :\n    let μ := Complex.re ⟪H ψ, ψ⟫_ℂ\n    ∃ eigenvalue : ℝ, HasEigenvalue H (eigenvalue : ℂ) ∧\n      |eigenvalue - μ| ≤ Real.sqrt (‖H ψ‖ ^ 2 - μ ^ 2)",
+      "axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ]
+    }
+  ],
+  "timings_seconds": {
+    "lake_build": 2.788177541922778,
+    "axiom_audit": 47.03808154212311
+  }
+}

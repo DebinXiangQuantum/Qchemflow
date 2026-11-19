@@ -1,28 +1,30 @@
-name: QCL CPU and Agent
+name: QCL and ChemFlow CPU tests
 
 on:
   push:
     paths:
       - .github/workflows/qcl.yml
+      - pyproject.toml
       - qcl/**
-      - src/chemflow/impls/pyscf_impls.py
-      - src/chemflow/runtime/artifacts.py
-      - src/chemflow/units.py
-      - src/chemflow/agent/qcl.py
-      - src/chemflow/agent/memory.py
-      - src/chemflow/cli.py
-      - tests/test_qcl_agent.py
+      - src/**
+      - tests/**
+      - formal/**
+      - evidence/**
+      - benchmarks/results/**
+      - examples/**
+      - plugin/**
   pull_request:
     paths:
       - .github/workflows/qcl.yml
+      - pyproject.toml
       - qcl/**
-      - src/chemflow/impls/pyscf_impls.py
-      - src/chemflow/runtime/artifacts.py
-      - src/chemflow/units.py
-      - src/chemflow/agent/qcl.py
-      - src/chemflow/agent/memory.py
-      - src/chemflow/cli.py
-      - tests/test_qcl_agent.py
+      - src/**
+      - tests/**
+      - formal/**
+      - evidence/**
+      - benchmarks/results/**
+      - examples/**
+      - plugin/**
 
 jobs:
   cpu:
@@ -36,11 +38,11 @@ jobs:
         with:
           components: rustfmt
       - run: python -m venv .venv
-      - run: .venv/bin/python -m pip install -e '.[quantum,reactivity,paths]' pytest ruff maturin
+      - run: .venv/bin/python -m pip install -e '.[quantum,reactivity,paths,mcp,llm,openai]' pytest ruff maturin
       - run: cargo fmt --all --check
         working-directory: qcl
       - run: PYO3_PYTHON="$GITHUB_WORKSPACE/.venv/bin/python" cargo test --workspace --locked
         working-directory: qcl
       - run: VIRTUAL_ENV="$PWD/.venv" .venv/bin/maturin develop --manifest-path qcl/Cargo.toml
-      - run: .venv/bin/ruff check qcl/python qcl/tests qcl/apps src/chemflow/agent/qcl.py src/chemflow/agent/memory.py src/chemflow/cli.py tests/test_qcl_agent.py
-      - run: OMP_NUM_THREADS=1 .venv/bin/python -m pytest qcl/tests tests/test_qcl_agent.py tests/test_kernel.py tests/test_physics.py tests/test_p2_build.py -q
+      - run: .venv/bin/ruff check src tests qcl/python qcl/tests qcl/apps
+      - run: OMP_NUM_THREADS=1 .venv/bin/python -m pytest qcl/tests tests -q
