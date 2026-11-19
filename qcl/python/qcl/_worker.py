@@ -2798,11 +2798,17 @@ def main() -> None:
         np.random.seed(0)
     cpu_core_s = request.get("cpu_core_s")
     if cpu_core_s is not None:
+        import os
         import resource
         import signal
 
         def exceeded(_signum, _frame):
-            raise TimeoutError("QCL-E503: CPU core-time limit exceeded")
+            # Exit instead of raising: an exception raised from a signal handler
+            # surfaces at an arbitrary line, where library code (for example an
+            # import) can catch or replace it and lose the marker the parent
+            # process uses to classify the failure.
+            os.write(2, b"QCL-E503: CPU core-time limit exceeded\n")
+            os._exit(128 + signal.SIGXCPU)
 
         signal.signal(signal.SIGPROF, exceeded)
         signal.setitimer(signal.ITIMER_PROF, cpu_core_s)
