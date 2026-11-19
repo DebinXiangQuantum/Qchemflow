@@ -13,6 +13,7 @@ ChemFlow runtime and Agent integration it uses. The repository name is
 | `plugin/` | Source templates for Agent plugins, roles, skills and integrity hooks |
 | `examples/` | Small ChemFlow runtime examples used by the smoke checks |
 | `docs/spec/qcl-design.md` | QCL design specification and acceptance criteria |
+| `docs/` | ChemFlow feature guides; start with `docs/applications.md` |
 
 QCL reuses ChemFlow's chemistry implementations and artifact handling. The
 current implementation has working CPU reference workflows and explicit GPU
