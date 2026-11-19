@@ -381,3 +381,27 @@ predicate suitable for `qcl.require`; the path can also be returned as a
 
 `qcl/tests/test_primitives.py` fails when the table, the handlers and the
 checker disagree. `qcl.primitives()` returns the table as a dictionary.
+
+## A CPU-GPU-QPU application
+
+`apps/n2_dissociation.py` computes the N2 triple-bond dissociation curve in
+cc-pVDZ. Each bond length runs on one (GPU, QPU) lane:
+
+| Device | Work |
+|---|---|
+| GPU | RHF (GPU4PySCF); CASCI reference in the active space |
+| CPU | active-space Hamiltonian, CCSD amplitudes, SQD diagonalization |
+| QPU | CCSD-seeded LUCJ circuit, sampled on a QPU or a QPU simulator |
+
+Every cross-device value is an explicit `.to()` copy, and the plan compiles
+with `strict_transfers=True`. The local cluster pairs each visible GPU with a
+statevector simulator hosted on that GPU; `--cluster cluster.toml` pairs the
+listed GPUs with the listed QPUs instead.
+
+```sh
+QCL_POLICY_FILE=qcl/apps/n2-policy.toml .venv/bin/python qcl/apps/n2_dissociation.py
+QCL_POLICY_FILE=qcl/apps/n2-policy.toml .venv/bin/python qcl/apps/n2_dissociation.py --active 10 10
+```
+
+The plan still runs in one worker that executes nodes in dependency order, so
+the lanes do not yet overlap in time.

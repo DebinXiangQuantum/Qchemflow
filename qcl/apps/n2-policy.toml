@@ -1,0 +1,4 @@
+# Operator policy for apps/n2_dissociation.py: 8 bond lengths x 4000 shots.
+[budget]
+qpu_shots = 32000
+wall_time = "2h"
