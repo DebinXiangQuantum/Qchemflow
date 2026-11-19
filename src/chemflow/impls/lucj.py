@@ -90,6 +90,8 @@ def ccsd_seed_from_integrals(hamiltonian, sector: Sector, store, site_reference=
         return LucjParams.zeros(sector.n_orb)
     h1, h2 = store.get(hamiltonian.h1_ref), store.get(hamiltonian.h2_ref)
     molecule = gto.M(verbose=0)
+    # Integrals only: keep PySCF on in-core paths (its out-of-core paths need a real basis).
+    molecule.incore_anyway = True
     molecule.nelectron = sector.n_alpha + sector.n_beta
     reference = scf.RHF(molecule)
     reference.get_hcore = lambda *args: h1

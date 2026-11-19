@@ -26,7 +26,7 @@ class ReplayResult:
 
 
 def load_screen(name: str, root: str | Path) -> dict:
-    entry = json.loads(REGISTRY.read_text())[name]
+    entry = json.loads(REGISTRY.read_text(encoding="utf-8"))[name]
     path = Path(root) / entry["path"]
     if not path.is_file():
         raise FileNotFoundError(f"Recorded screen absent: {path}")

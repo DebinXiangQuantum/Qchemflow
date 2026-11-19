@@ -90,7 +90,7 @@ class SQDSolver(fci.selected_ci.SelectedCI):
             pending_store, pending_prep, predicted = self._pending
             self._last_prediction = predicted
             record_path = self._hardware_record_path(pending_prep)
-            record = json.loads(record_path.read_text()) if record_path.exists() else {}
+            record = json.loads(record_path.read_text(encoding="utf-8")) if record_path.exists() else {}
             if record.get("state") not in ("submitted", "completed"):
                 if "wall_s" in self._budget.limits:
                     self._budget.spent["wall_s"] = (self._resources["wall_s"] +
@@ -105,7 +105,7 @@ class SQDSolver(fci.selected_ci.SelectedCI):
             except Exception:
                 archived = sorted(set(archive.glob(f"{record_path.stem}-*.json")) - prior_archives)
                 if not record_path.exists() and archived:
-                    failed = json.loads(archived[-1].read_text())
+                    failed = json.loads(archived[-1].read_text(encoding="utf-8"))
                     if failed.get("state") == "failed":
                         self._pending = None
                         self._repetition += 1
@@ -248,6 +248,9 @@ class GPUFCISolver(fci.direct_spin1.FCISolver):
         self.last_run = {}
 
     def kernel(self, h1e, eri, norb, nelec, ci0=None, ecore=0, **kwargs):
+        from chemflow.backends.cuda_libs import prefer_wheel_cuda_libraries
+
+        prefer_wheel_cuda_libraries()
         import cupy as cp
 
         from chemflow.backends.gpu import FciKernel, fci_ground_state

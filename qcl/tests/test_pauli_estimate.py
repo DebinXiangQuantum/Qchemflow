@@ -2,6 +2,11 @@ import pytest
 
 import qcl
 
+# HF-kernel estimates and VQE run on a CPU-hosted statevector simulator. On a host with
+# GPUs, Cluster.local() hosts its simulators on the GPUs, so name the CPU one explicitly.
+CPU_SIMULATOR = qcl.Device("sim0", "qpu", qubits=20, simulator_host="cpu0",
+                           simulator_method="statevector")
+
 
 @qcl.workflow
 def hf_pauli_energy(molecule, active, cpu, qpu, n_groups=5):
@@ -19,7 +24,7 @@ def _inputs():
 
 def test_pauli_estimate_on_local_simulator(tmp_path, monkeypatch):
     cluster = qcl.Cluster.local()
-    plan = hf_pauli_energy.compile(*_inputs(), cluster.cpus[0], cluster.qpus[0],
+    plan = hf_pauli_energy.compile(*_inputs(), cluster.cpus[0], CPU_SIMULATOR,
                                    strict_transfers=True)
     assert plan.estimate()["shots"] == 640
     assert plan.estimate()["qpu_cost"] == 0
@@ -75,9 +80,9 @@ def test_pauli_estimate_rejects_wrong_operator_and_group_count():
 
     cluster = qcl.Cluster.local()
     with pytest.raises(qcl.CompileError, match="QCL-E101"):
-        wrong_type.compile(*_inputs(), cluster.cpus[0], cluster.qpus[0])
+        wrong_type.compile(*_inputs(), cluster.cpus[0], CPU_SIMULATOR)
 
-    plan = hf_pauli_energy.compile(*_inputs(), cluster.cpus[0], cluster.qpus[0],
+    plan = hf_pauli_energy.compile(*_inputs(), cluster.cpus[0], CPU_SIMULATOR,
                                    n_groups=4)
     with pytest.raises(ValueError, match="n_groups"):
         execute({"graph": plan.graph_json(), "output": plan._output.node_id})

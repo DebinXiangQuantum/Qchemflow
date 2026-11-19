@@ -73,7 +73,7 @@ def run(args) -> None:
                 getattr(args, "dry_run", False) or getattr(args, "device", None) is not None):
             raise ValueError("--cluster, --device and --dry-run require --program or --engine qcl")
         try:
-            record = TaskRecord.model_validate_json(args.task.read_text())
+            record = TaskRecord.model_validate_json(args.task.read_text(encoding="utf-8"))
             verifier = TaskVerifier(args.public_key.read_bytes())
             verifier.verify(record)
         except (OSError, ValueError, TypeError) as exc:

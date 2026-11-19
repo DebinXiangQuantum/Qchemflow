@@ -32,7 +32,7 @@ def _install_strict_schema(server, name: str, schema: dict) -> None:
 
 def load_task(path: str, verifier: TaskVerifier) -> tuple[TaskRecord, TaskVerifier]:
     try:
-        record = TaskRecord.model_validate_json(Path(path).read_text())
+        record = TaskRecord.model_validate_json(Path(path).read_text(encoding="utf-8"))
         verifier.verify(record)
         return record, verifier
     except (OSError, ValueError, TypeError, ValidationError, AdapterError):

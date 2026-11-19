@@ -5,11 +5,15 @@ import time
 import numpy as np
 from pyscf import ao2mo, fci, lib
 
+from chemflow.backends.cuda_libs import prefer_wheel_cuda_libraries
 from chemflow.diagnostics import AdapterError
 from chemflow.impls.fci import sector_states
 from chemflow.registry import ImplementationSpec
 from chemflow.runtime import ExecutionResult
 from chemflow.types import BackendKind, Samples
+
+# Before any CuPy kernel compiles; see cuda_libs.
+prefer_wheel_cuda_libraries()
 
 
 class FciKernel:

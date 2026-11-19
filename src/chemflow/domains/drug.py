@@ -34,7 +34,7 @@ def fetch_pubchem(name: str) -> dict[str, str | int]:
 
 def _read_name_cache(path):
     try:
-        records = json.loads(path.read_text())
+        records = json.loads(path.read_text(encoding="utf-8"))
         return records if isinstance(records, dict) else {}
     except (OSError, ValueError):
         return {}
@@ -339,7 +339,7 @@ def dock(store, library, receptor_pdbqt, center, box, seed=0):
     pdbqt, ok, message = PDBQTWriterLegacy.write_string(setups[0])
     if not ok:
         raise ValueError(message)
-    text = receptor_pdbqt if "\n" in receptor_pdbqt else Path(receptor_pdbqt).read_text()
+    text = receptor_pdbqt if "\n" in receptor_pdbqt else Path(receptor_pdbqt).read_text(encoding="utf-8")
     with tempfile.TemporaryDirectory() as directory:
         receptor = Path(directory) / "receptor.pdbqt"
         receptor.write_text(text)

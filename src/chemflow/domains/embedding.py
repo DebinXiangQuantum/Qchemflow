@@ -27,6 +27,8 @@ def _cluster_reference(h1, eri, occupied):
     from pyscf import gto, scf
 
     mol = gto.M(verbose=0)
+    # Integrals only: keep PySCF on in-core paths (its out-of-core paths need a real basis).
+    mol.incore_anyway = True
     mol.nelectron = 2 * occupied
     mf = scf.RHF(mol)
     mf.get_hcore = lambda *args: h1

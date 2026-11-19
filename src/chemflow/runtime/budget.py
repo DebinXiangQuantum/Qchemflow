@@ -34,7 +34,7 @@ class BudgetLedger:
 
     def reload(self) -> None:
         if self.path is not None and self.path.exists():
-            self.spent = json.loads(self.path.read_text())
+            self.spent = json.loads(self.path.read_text(encoding="utf-8"))
 
     def reserve(self, cost: CostRecord) -> None:
         for dimension, limit in self.limits.items():

@@ -25,7 +25,7 @@ class Journal:
 
 def replay(journal: Journal | str | Path, policies: dict) -> list[dict]:
     path = journal.path if isinstance(journal, Journal) else Path(journal)
-    entries = [json.loads(line) for line in path.read_text().splitlines()]
+    entries = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
     for entry in entries:
         policy = policies.get(entry["role"])
         if policy is not None:

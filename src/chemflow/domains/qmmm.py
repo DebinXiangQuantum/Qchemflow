@@ -26,7 +26,7 @@ def mm_system(store, pdb, forcefields, nonbonded="NoCutoff"):
         from openmm import app
     except ImportError as exc:
         raise AdapterError("CF-E080", None, "OpenMM is unavailable", "Install the mm extra") from exc
-    text = pdb if "\n" in pdb else Path(pdb).read_text()
+    text = pdb if "\n" in pdb else Path(pdb).read_text(encoding="utf-8")
     structure = app.PDBFile(io.StringIO(text))
     if nonbonded not in ("NoCutoff", "CutoffNonPeriodic", "CutoffPeriodic", "PME", "Ewald", "LJPME"):
         raise ValueError("Unsupported OpenMM nonbonded method")
@@ -73,7 +73,7 @@ def static_check(program, registry):
             from openmm import app
 
             pdb = source.params["pdb"]
-            text = pdb if "\n" in pdb else Path(pdb).read_text()
+            text = pdb if "\n" in pdb else Path(pdb).read_text(encoding="utf-8")
             _check_region(app.PDBFile(io.StringIO(text)).topology, node.params["qm_atoms"])
         except AdapterError as exc:
             issues.extend(issue.model_copy(update={"node": node.id}) for issue in exc.diagnostics)

@@ -197,13 +197,13 @@ def main() -> None:
             (args.dir / "public.pem").write_bytes(public)
             print(TaskVerifier(public).fingerprint)
         elif args.command == "task":
-            source = Path(args.source).read_text() if args.source else sys.stdin.read()
+            source = Path(args.source).read_text(encoding="utf-8") if args.source else sys.stdin.read()
             spec = TaskSpec.model_validate(yaml.safe_load(source))
             if args.action == "draft":
                 print(spec.model_dump_json(indent=2))
             else:
                 record = _signer(args.key_dir).freeze(spec, args.approver)
-                Path(args.out).write_text(record.model_dump_json(indent=2) + "\n")
+                Path(args.out).write_text(record.model_dump_json(indent=2) + "\n", encoding="utf-8")
                 if args.activate:
                     pointer = Path.home() / ".chemflow/tasks/current.json"
                     pointer.parent.mkdir(parents=True, exist_ok=True)
@@ -241,7 +241,7 @@ def main() -> None:
                 paths = sorted(backend.state_dir.glob("*.json"))
                 paths += sorted((backend.state_dir / "archive").glob("*.json"))
                 for path in paths:
-                    record = json.loads(path.read_text())
+                    record = json.loads(path.read_text(encoding="utf-8"))
                     device = record.get("backend", args.backend)
                     total = totals.setdefault(device, {"qpu_shots": 0, "qpu_s": 0, "unresolved": 0})
                     state = record["state"]
@@ -266,7 +266,7 @@ def main() -> None:
                           f"qpu_s={total['qpu_s']:g}; unresolved {total['unresolved']}")
 
         else:
-            for line in Path(args.path).read_text().splitlines():
+            for line in Path(args.path).read_text(encoding="utf-8").splitlines():
                 print(json.dumps(json.loads(line), indent=2))
     except (OSError, ValueError, TypeError, KeyError, PermissionError, yaml.YAMLError) as exc:
         if args.command == "tool":

@@ -4,6 +4,11 @@ import pytest
 
 import qcl
 
+# HF-kernel estimates and VQE run on a CPU-hosted statevector simulator. On a host with
+# GPUs, Cluster.local() hosts its simulators on the GPUs, so name the CPU one explicitly.
+CPU_SIMULATOR = qcl.Device("sim0", "qpu", qubits=20, simulator_host="cpu0",
+                           simulator_method="statevector")
+
 
 @qcl.workflow
 def hf_samples(molecule, active, cpu, qpu, shots=128):
@@ -65,7 +70,7 @@ def test_sqd_energy_from_simulated_qpu_samples_matches_fci(tmp_path, monkeypatch
 
 def test_sampled_vqe_uses_qpu_simulator_and_declared_shot_budget(tmp_path, monkeypatch):
     cluster = qcl.Cluster.local()
-    plan = sampled_vqe_energy.compile(*_inputs(), cluster.cpus[0], cluster.qpus[0])
+    plan = sampled_vqe_energy.compile(*_inputs(), cluster.cpus[0], CPU_SIMULATOR)
     assert plan.estimate()["shots"] == 3 * 5 * 128
     assert plan.estimate()["qpu_cost"] == 0
     policy = tmp_path / "policy.toml"

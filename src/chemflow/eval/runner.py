@@ -130,7 +130,7 @@ def load_suite(name: str | None = None, path: Path | None = None) -> Suite:
         if name not in list_suites():
             raise ValueError(f"Unknown suite: {name}")
         path = files("chemflow.eval.suites").joinpath(f"{name}.yaml")
-    return Suite.model_validate(yaml.safe_load(path.read_text()))
+    return Suite.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
 
 
 def select_tasks(suite: Suite, selection: str | None) -> list[EvaluationTask]:
@@ -365,9 +365,9 @@ def _run_task(task: EvaluationTask, directory: Path, public_path: Path,
 
 def _score_artifacts(task: EvaluationTask, directory: Path, error: str | None = None) -> dict:
     summary_path = directory / "summary.json"
-    summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
+    summary = json.loads(summary_path.read_text(encoding="utf-8")) if summary_path.exists() else {}
     journal_path = directory / "journal.jsonl"
-    journal = [json.loads(line) for line in journal_path.read_text().splitlines()
+    journal = [json.loads(line) for line in journal_path.read_text(encoding="utf-8").splitlines()
                if line.strip()] if journal_path.exists() else []
     scalars = (_spectral_values(directory, summary)
                if task.spec.target.kind == "spectral_function" else None)

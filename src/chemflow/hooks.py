@@ -148,7 +148,7 @@ def evaluate(event: dict, *, journal: str | None = None,
         if tool is not None:
             _record(path, event, tool, arguments)
         return None
-    entries = [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+    entries = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()] if path.exists() else []
     screened = any(item.get("tool") == "run" and item.get("scale") == "screen" and
                    item.get("outcome") == "ok" for item in entries)
     reported = any(item.get("tool") == "report.write" and item.get("outcome") == "ok"

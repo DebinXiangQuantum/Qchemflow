@@ -1,0 +1,514 @@
+# QCL primitive table: the single declaration of every operation the IR can contain.
+#
+# Each entry is keyed by the IR op name and declares:
+#   kind     host | compute | projection | copy                      (NodeKind)
+#   output   the produced ValueType, or "input" when it is an input's type
+#   output_from
+#            which input supplies an "input" output type (default 0)
+#   devices  device kinds that have a registered implementation (compute ops only).
+#            The checker reports QCL-E203 for any other kind; conditional limits
+#            (open-shell GPU SCF, the native CI engine, same-GPU densities, ...)
+#            stay as explicit rules in qcl-check.
+#   axis     the parallel axis an implementation splits a device list along
+#   message, hint
+#            optional QCL-E203 wording; the default is
+#            "<op> has no <kind> implementation" / "Available device kinds: ..."
+#
+# Adding an operation: declare it here, add the frontend function that builds the
+# node, and register a worker handler with @implements("<op>") in qcl/_impls/.
+# qcl/tests/test_primitives.py fails if the three disagree.
+
+# ---- host: molecules, checks, control flow and constructions --------------------
+["molecule"]
+kind = "host"
+output = "molecule"
+
+["molecule.edit"]
+kind = "host"
+output = "molecule"
+
+["boolean.constant"]
+kind = "host"
+output = "boolean"
+
+["integer.compare"]
+kind = "host"
+output = "boolean"
+
+["path.connects"]
+kind = "host"
+output = "boolean"
+
+["require"]
+kind = "host"
+output = "boolean"
+
+["cond"]
+kind = "host"
+output = "input"
+output_from = 1
+
+["map"]
+kind = "host"
+output = "collection"
+axis = "items"
+
+["scan"]
+kind = "host"
+output = "collection"
+
+["iterate"]
+kind = "host"
+output = "input"
+
+["optimize"]
+kind = "host"
+output = "molecule"
+
+["kernel.hf"]
+kind = "host"
+output = "kernel"
+
+["kernel.lucj"]
+kind = "host"
+output = "kernel"
+
+["kernel.custom"]
+kind = "host"
+output = "kernel"
+
+["models.hubbard"]
+kind = "host"
+output = "fermion_operator"
+
+["lattice.sector"]
+kind = "host"
+output = "sector"
+
+["sector.shift"]
+kind = "host"
+output = "sector"
+
+["ci.vector"]
+kind = "host"
+output = "tensor"
+
+["samples.merge"]
+kind = "host"
+output = "bitstrings"
+
+["copy"]
+kind = "copy"
+output = "input"
+
+# ---- projections of composite results -------------------------------------------
+["collection.index"]
+kind = "projection"
+output = "molecule"
+
+["frequencies.n_imaginary"]
+kind = "projection"
+output = "integer"
+
+["active.hamiltonian"]
+kind = "projection"
+output = "fermion_operator"
+
+["active.sector"]
+kind = "projection"
+output = "sector"
+
+["fci.coefficients"]
+kind = "projection"
+output = "tensor"
+
+["eigh.values"]
+kind = "projection"
+output = "tensor"
+
+["eigh.vectors"]
+kind = "projection"
+output = "tensor"
+
+["svd.u"]
+kind = "projection"
+output = "tensor"
+
+["svd.s"]
+kind = "projection"
+output = "tensor"
+
+["svd.vh"]
+kind = "projection"
+output = "tensor"
+
+["scf.energy"]
+kind = "projection"
+output = "estimate"
+
+["mp2.energy"]
+kind = "projection"
+output = "estimate"
+
+["fci.energy"]
+kind = "projection"
+output = "estimate"
+
+["sci.energy"]
+kind = "projection"
+output = "estimate"
+
+["ed.energy"]
+kind = "projection"
+output = "estimate"
+
+["scf.homo"]
+kind = "projection"
+output = "estimate"
+
+["scf.lumo"]
+kind = "projection"
+output = "estimate"
+
+["scf.homo_alpha"]
+kind = "projection"
+output = "estimate"
+
+["scf.lumo_alpha"]
+kind = "projection"
+output = "estimate"
+
+["scf.homo_beta"]
+kind = "projection"
+output = "estimate"
+
+["scf.lumo_beta"]
+kind = "projection"
+output = "estimate"
+
+# ---- Estimate arithmetic and comparison (host) -----------------------------------
+["estimate.add"]
+kind = "host"
+output = "estimate"
+
+["estimate.sub"]
+kind = "host"
+output = "estimate"
+
+["estimate.scale"]
+kind = "host"
+output = "estimate"
+
+["estimate.mean"]
+kind = "host"
+output = "estimate"
+
+["estimate.in_units"]
+kind = "host"
+output = "estimate"
+
+["estimates.merge"]
+kind = "host"
+output = "estimate"
+
+["estimate.compare"]
+kind = "host"
+output = "comparison"
+
+["rank"]
+kind = "host"
+output = "ranking"
+
+# ---- integrals and linear algebra -----------------------------------------------
+["int1e"]
+kind = "compute"
+output = "tensor"
+devices = ["cpu"]
+
+["int2e"]
+kind = "compute"
+output = "eri"
+devices = ["cpu"]
+
+["int3c"]
+kind = "compute"
+output = "tensor"
+devices = ["cpu"]
+
+["cholesky"]
+kind = "compute"
+output = "tensor"
+devices = ["cpu"]
+
+["eigh"]
+kind = "compute"
+output = "eigensystem"
+devices = ["cpu", "gpu"]
+
+["orthogonalize"]
+kind = "compute"
+output = "tensor"
+devices = ["cpu", "gpu"]
+
+["solve"]
+kind = "compute"
+output = "tensor"
+devices = ["cpu", "gpu"]
+
+["svd"]
+kind = "compute"
+output = "svd_result"
+devices = ["cpu", "gpu"]
+
+["transform"]
+kind = "compute"
+output = "tensor"
+devices = ["cpu", "gpu"]
+
+["contract"]
+kind = "compute"
+output = "tensor"
+devices = ["cpu", "gpu"]
+
+# ---- mean field, MP2, active spaces ----------------------------------------------
+# GPU SCF additionally needs a closed shell (or an open-shell-capable method) and no
+# precomputed ERI override; qcl-check enforces that as a conditional rule.
+["scf.rhf"]
+kind = "compute"
+output = "scf_result"
+devices = ["cpu", "gpu"]
+hint = "HF/KS without an ERI override supports cpu and gpu"
+
+["scf.hf"]
+kind = "compute"
+output = "scf_result"
+devices = ["cpu", "gpu"]
+hint = "HF/KS without an ERI override supports cpu and gpu"
+
+["scf.rohf"]
+kind = "compute"
+output = "scf_result"
+devices = ["cpu", "gpu"]
+hint = "HF/KS without an ERI override supports cpu and gpu"
+
+["scf.uhf"]
+kind = "compute"
+output = "scf_result"
+devices = ["cpu", "gpu"]
+hint = "HF/KS without an ERI override supports cpu and gpu"
+
+["dft.rks"]
+kind = "compute"
+output = "scf_result"
+devices = ["cpu", "gpu"]
+hint = "HF/KS without an ERI override supports cpu and gpu"
+
+["dft.uks"]
+kind = "compute"
+output = "scf_result"
+devices = ["cpu", "gpu"]
+hint = "HF/KS without an ERI override supports cpu and gpu"
+
+["mp2"]
+kind = "compute"
+output = "mp2_result"
+devices = ["cpu", "gpu"]
+
+["periodic.scf"]
+kind = "compute"
+output = "estimate"
+devices = ["cpu"]
+
+["active_space"]
+kind = "compute"
+output = "active_space"
+devices = ["cpu"]
+
+["ccsd.amplitudes"]
+kind = "compute"
+output = "lucj_params"
+devices = ["cpu"]
+
+# ---- CI space and lattice models ------------------------------------------------
+# engine="native" is CPU-only for fci.solve and sigma (conditional rule).
+["fci.solve"]
+kind = "compute"
+output = "fci_result"
+devices = ["cpu", "gpu"]
+
+["sci.solve"]
+kind = "compute"
+output = "sci_result"
+devices = ["cpu"]
+
+["sigma"]
+kind = "compute"
+output = "tensor"
+devices = ["cpu", "gpu"]
+
+["rdm1"]
+kind = "compute"
+output = "tensor"
+devices = ["cpu", "gpu"]
+
+["rdm2"]
+kind = "compute"
+output = "tensor"
+devices = ["cpu", "gpu"]
+
+["ed.ground_state"]
+kind = "compute"
+output = "ground_state"
+devices = ["cpu", "gpu"]
+
+["expect"]
+kind = "compute"
+output = "estimate"
+devices = ["cpu", "gpu"]
+
+["dynamics.spectral_exact"]
+kind = "compute"
+output = "spectral_estimate"
+devices = ["cpu"]
+
+# ---- quantum execution ------------------------------------------------------------
+["qubit_hamiltonian"]
+kind = "compute"
+output = "qubit_operator"
+devices = ["cpu"]
+
+["sample"]
+kind = "compute"
+output = "bitstrings"
+devices = ["qpu"]
+axis = "shots"
+message = "sample requires a QPU or QPU simulator"
+hint = "Available device kinds: qpu"
+
+["estimate.quantum"]
+kind = "compute"
+output = "estimate"
+devices = ["qpu"]
+axis = "measurement_groups"
+message = "Pauli estimate requires a QPU or QPU simulator"
+hint = "Place the estimate on a QPU device"
+
+["vqe.sampled"]
+kind = "compute"
+output = "estimate"
+devices = ["qpu"]
+message = "Sampled VQE requires a QPU or QPU simulator"
+hint = "Place the VQE estimate on a QPU device"
+
+["sqd.diagonalize"]
+kind = "compute"
+output = "estimate"
+devices = ["cpu"]
+
+# ---- geometry, derivatives and paths -------------------------------------------
+["geometry.optimize"]
+kind = "compute"
+output = "molecule"
+devices = ["cpu"]
+
+["geometry.constrained_optimize"]
+kind = "compute"
+output = "molecule"
+devices = ["cpu"]
+
+["geometry.fd_optimize"]
+kind = "compute"
+output = "molecule"
+devices = ["cpu"]
+
+["sella.saddle"]
+kind = "compute"
+output = "molecule"
+devices = ["cpu"]
+
+["irc"]
+kind = "compute"
+output = "reaction_path"
+devices = ["cpu"]
+
+["gradient"]
+kind = "compute"
+output = "tensor"
+devices = ["cpu", "gpu"]
+
+["hessian"]
+kind = "compute"
+output = "hessian"
+devices = ["cpu", "gpu"]
+
+["frequencies"]
+kind = "compute"
+output = "frequencies"
+devices = ["cpu"]
+
+["frequencies.from_hessian"]
+kind = "compute"
+output = "frequencies"
+devices = ["cpu"]
+
+# ---- engines ------------------------------------------------------------------------
+["rdkit.embed"]
+kind = "compute"
+output = "collection"
+devices = ["cpu"]
+
+["rdkit.mmff_optimize"]
+kind = "compute"
+output = "molecule"
+devices = ["cpu"]
+
+["rdkit.dedupe"]
+kind = "compute"
+output = "collection"
+devices = ["cpu"]
+
+["gfn2.energy"]
+kind = "compute"
+output = "estimate"
+devices = ["cpu"]
+
+["gfn2.optimize"]
+kind = "compute"
+output = "molecule"
+devices = ["cpu"]
+
+["binding.mmgbsa"]
+kind = "compute"
+output = "estimate"
+devices = ["cpu"]
+
+["metabolism.sites"]
+kind = "compute"
+output = "site_scores"
+devices = ["cpu"]
+
+["solubility.esol"]
+kind = "compute"
+output = "estimate"
+devices = ["cpu"]
+
+["solubility.gse"]
+kind = "compute"
+output = "estimate"
+devices = ["cpu"]
+
+# ---- post-processing -----------------------------------------------------------------
+["thermo.rrho"]
+kind = "compute"
+output = "estimate"
+devices = ["cpu"]
+
+["thermo.eyring"]
+kind = "compute"
+output = "estimate"
+devices = ["cpu"]
+
+["superconductivity.allen_dynes"]
+kind = "compute"
+output = "estimate"
+devices = ["cpu"]

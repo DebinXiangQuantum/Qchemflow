@@ -1387,7 +1387,7 @@ def run_cli(args: Any) -> None:
     from chemflow.signing import TaskVerifier as SignatureVerifier
     from chemflow.types import CostRecord
 
-    record = TaskRecord.model_validate_json(args.task.read_text())
+    record = TaskRecord.model_validate_json(args.task.read_text(encoding="utf-8"))
     verifier = SignatureVerifier(args.public_key.read_bytes())
     agent = QclAgent(record, verifier)
     cluster = qcl.Cluster.load(args.cluster) if args.cluster else qcl.Cluster.local()

@@ -73,7 +73,7 @@ def load_cards(registry: Registry | None = None) -> list[AlgorithmCard]:
         for pack in directory.iterdir():
             if pack.is_dir():
                 paths.extend(path for path in pack.iterdir() if path.name.endswith(".yaml"))
-    cards = [AlgorithmCard.model_validate(yaml.safe_load(path.read_text()))
+    cards = [AlgorithmCard.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
              for path in sorted(paths, key=lambda item: item.name)]
     return [card for card in cards if registry is None or card.target in registry.operators]
 
@@ -85,10 +85,10 @@ def evidence_applicability(path: Path, root: Path):
     try:
         if path.suffix != ".json":
             linked = [evidence_applicability(path.parent / link, root) for link in
-                      re.findall(r"\]\(([^)]+\.json)\)", path.read_text())]
+                      re.findall(r"\]\(([^)]+\.json)\)", path.read_text(encoding="utf-8"))]
             scopes = [scope for scope in linked if scope]
             return scopes[0] if len(scopes) == 1 else {"records": scopes} if scopes else None
-        payload = json.loads(path.read_text())
+        payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     fields = {"system", "molecule", "molecule_definition", "n_orb", "n_elec", "norb",
@@ -198,7 +198,7 @@ def validate_cards(registry: Registry, repo_root: Path,
                 status, message = "unavailable", "Evidence file not present locally"
             elif sha256(path.read_bytes()).hexdigest() != evidence.sha256:
                 status, message = "error", "Evidence hash mismatch"
-            elif evidence.quote is not None and evidence.quote not in path.read_text():
+            elif evidence.quote is not None and evidence.quote not in path.read_text(encoding="utf-8"):
                 status, message = "error", "Evidence quote not found"
             else:
                 status, message = "ok", "Evidence hash and quote verified"

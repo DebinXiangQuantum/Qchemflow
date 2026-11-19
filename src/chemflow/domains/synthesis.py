@@ -56,13 +56,13 @@ def search_routes(store, target, stock="zinc", iterations=100, time_limit_s=120,
             raise ValueError("AiZynthFinder isolated environment/data missing")
         metadata = list((home / "env/lib").glob(
             "python*/site-packages/aizynthfinder-4.4.1.dist-info/METADATA"))
-        if not metadata or "Version: 4.4.1\n" not in metadata[0].read_text():
+        if not metadata or "Version: 4.4.1\n" not in metadata[0].read_text(encoding="utf-8"):
             raise ValueError("The isolated adapter requires AiZynthFinder 4.4.1")
         if type(iterations) is not int or iterations < 1 or not 0 < time_limit_s < float("inf"):
             raise ValueError("Route search requires positive iterations and finite time limit")
         if seed is not None:
             raise ValueError("AiZynthFinder 4.4.1 CLI does not expose a random seed")
-        config = yaml.safe_load(config_path.read_text())
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
         stock_path = Path(config["stock"][stock])
         if not stock_path.is_absolute():
             stock_path = config_path.parent / stock_path
@@ -98,7 +98,7 @@ def search_routes(store, target, stock="zinc", iterations=100, time_limit_s=120,
                 raise ValueError(f"AiZynthFinder failed: {status}; "
                                  f"stderr tail: {completed.stderr[-2000:] or '<empty>'}; "
                                  f"stdout tail: {completed.stdout[-2000:] or '<empty>'}")
-            routes = parse_routes(json.loads(output.read_text()))
+            routes = parse_routes(json.loads(output.read_text(encoding="utf-8")))
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError,
             subprocess.TimeoutExpired) as exc:
         raise AdapterError("CF-E080", None, str(exc),

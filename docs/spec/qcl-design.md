@@ -958,6 +958,38 @@ pub enum Buffer {
 - `qcl_register_impl(...)` lets external C, C++ or Fortran code add implementations or new device kinds.
 - A later phase adds C entry points for building and running plans, so HPC codes can use QCL without Python.
 
+### 10.8 Primitive table (implemented)
+
+The traits in §10.3 are the target. The implemented core today declares
+primitives in one table and registers implementations in the Python worker:
+
+- `qcl/crates/qcl-ir/primitives.toml` declares every IR operation: its node
+  kind (host, compute, projection, copy), output type (or the type of input
+  `output_from`), the device kinds that have an implementation, an optional
+  parallel axis, and optional QCL-E203 wording. `qcl-ir` embeds the file with
+  `include_str!` and validates it at load time.
+- `qcl-check` reports QCL-E203 for an unknown operation and for any device kind
+  missing from the table. Conditions that depend on inputs stay explicit rules:
+  GPU SCF needs a closed shell (or an open-shell method) and no ERI override; the
+  native CI engine is CPU-only; GPU densities need the FCI state on the same GPU;
+  QPU programs are checked for width, simulator and site.
+- `GraphBuilder.add_node(op, inputs, params, source)` takes the kind and output
+  type from the table. `qcl.compile` refuses a graph that disagrees with the
+  table (an internal error, never a user diagnostic). `qcl.primitives()` exposes
+  the table to Python and to agents.
+- Worker handlers live in `qcl/_impls/<family>.py`, each registered with
+  `@implements("<op>", ...)`; `qcl._worker.execute` dispatches through that
+  registry.
+- `qcl/tests/test_primitives.py` requires that the table, the registry and
+  the checker agree.
+
+Adding an operation therefore takes three edits: a table entry, a frontend
+function, and an `@implements` handler.
+
+Known gap: a plan still runs in one worker subprocess that executes nodes in
+topological order, so operations on different devices do not yet overlap.
+The asynchronous executor of §10.3 and §10.4 remains to be built.
+
 ---
 
 ## 11. Primitive implementation plan
@@ -1106,6 +1138,7 @@ qcl/
 | D17 | Implementations sharing a primitive must satisfy one fidelity contract | Placement changes alone must preserve the scientific result within tolerance |
 | D18 | Local examples must support a CPU-only host | `Cluster.local()` does not guarantee a GPU |
 | D19 | Dynamic pattern collections remain symbolic; lane identity cannot change the scientific question | Work assignment may vary without changing results |
+| D20 | Primitives are declared once in `primitives.toml`; the checker's coarse device availability, the graph builder's node types and the worker registry all derive from or are tested against it | Device availability was hand-copied across the frontend, checker and an 80-branch worker `if` chain; adding an operation touched five places that could silently disagree |
 
 ---
 

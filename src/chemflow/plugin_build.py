@@ -25,7 +25,7 @@ VERSION = "0.1.0"
 
 def _write(path: Path, value: str | dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text((json.dumps(value, indent=2) + "\n") if isinstance(value, dict) else value)
+    path.write_text((json.dumps(value, indent=2) + "\n") if isinstance(value, dict) else value, encoding="utf-8")
 
 
 def _roles(profiles: str | None, target: str) -> list[str]:
@@ -39,7 +39,7 @@ def _roles(profiles: str | None, target: str) -> list[str]:
 def _tools(role: str) -> list[str]:
     if role == "full":
         return list(dict.fromkeys(tool for candidate in PROFILES[:-1] for tool in _tools(candidate)))
-    source = (SOURCE / "agents" / f"{role}.md").read_text()
+    source = (SOURCE / "agents" / f"{role}.md").read_text(encoding="utf-8")
     match = re.search(r"Allowed MCP tools: (.*)", source)
     if match is None:
         raise ValueError(f"Missing role tools: {role}")
@@ -99,7 +99,7 @@ def build(target: str, out: Path, public_key: Path, *, task: Path | None = None,
     if not command.is_file() or not hook.is_file():
         raise ValueError("Server and hook commands must be files")
     roles = _roles(profiles, target)
-    template = json.loads((SOURCE / "hooks/hooks.template.json").read_text())
+    template = json.loads((SOURCE / "hooks/hooks.template.json").read_text(encoding="utf-8"))
     out.mkdir(parents=True, exist_ok=True)
     name = "chemflow"
     description = "Task-bound molecular chemistry tools and integrity hooks"
@@ -114,7 +114,7 @@ def build(target: str, out: Path, public_key: Path, *, task: Path | None = None,
                     "displayName": "ChemFlow", "shortDescription": description,
                     "developerName": "ChemFlow", "category": "Science",
                     "capabilities": ["MCP tools", "skills", "hooks"]}}}
-            _write(plugin_root / "AGENTS.md", (SOURCE / "rules/chemflow-rules.md").read_text())
+            _write(plugin_root / "AGENTS.md", (SOURCE / "rules/chemflow-rules.md").read_text(encoding="utf-8"))
             _write(out / ".agents/plugins/marketplace.json", {
                 "name": name, "interface": {"displayName": "ChemFlow"}, "plugins": [{
                     "name": name, "source": {"source": "local", "path": "./plugins/chemflow"},
@@ -135,7 +135,7 @@ def build(target: str, out: Path, public_key: Path, *, task: Path | None = None,
         for role in roles:
             if role == "full":
                 continue
-            body = (SOURCE / "agents" / f"{role}.md").read_text()
+            body = (SOURCE / "agents" / f"{role}.md").read_text(encoding="utf-8")
             contract = " ".join(body.split("Allowed MCP tools:", 1)[0].splitlines()[2:]).strip()
             delegation = f"Delegate to the ChemFlow {role} when this role's scoped work is needed: {contract}"
             allow = [f"mcp__plugin_chemflow_chemflow-{role}__{tool}" for tool in _tools(role)]
@@ -147,7 +147,7 @@ def build(target: str, out: Path, public_key: Path, *, task: Path | None = None,
             _write(out / "agents" / f"{role}.md", f"---\n{frontmatter}---\n{body}")
     elif target == "goose":
         _copy_skills(out / ".agents/skills")
-        _write(out / "AGENTS.md", (SOURCE / "rules/chemflow-rules.md").read_text())
+        _write(out / "AGENTS.md", (SOURCE / "rules/chemflow-rules.md").read_text(encoding="utf-8"))
         _write(out / ".goosehints", "Follow AGENTS.md for ChemFlow integrity rules.\n")
         _write(out / ".agents/plugins/chemflow/hooks/hooks.json",
                 _hooks(hook, template, protect=protect, goose=True))
@@ -159,7 +159,7 @@ def build(target: str, out: Path, public_key: Path, *, task: Path | None = None,
         _write(out / "goose-config.yaml", yaml.safe_dump({"extensions": extensions}, sort_keys=False))
     elif target == "hermes":
         _copy_skills(out / "skills")
-        _write(out / "AGENTS.md", (SOURCE / "rules/chemflow-rules.md").read_text())
+        _write(out / "AGENTS.md", (SOURCE / "rules/chemflow-rules.md").read_text(encoding="utf-8"))
         _write(out / "plugin.yaml", yaml.safe_dump({"name": name, "version": VERSION,
                 "description": description}, sort_keys=False))
         _write(out / "hermes-config.yaml", yaml.safe_dump({

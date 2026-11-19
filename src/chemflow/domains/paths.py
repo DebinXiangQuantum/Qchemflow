@@ -294,7 +294,7 @@ def constrained_optimize(store, molecule, model, level, constraints) -> Optimiza
         from pyscf.geomopt.geometric_solver import optimize
 
         names = {"bond": "distance", "angle": "angle", "dihedral": "dihedral"}
-        with tempfile.NamedTemporaryFile(mode="w+", suffix=".constraints") as stream:
+        with tempfile.NamedTemporaryFile(encoding="utf-8", mode="w+", suffix=".constraints") as stream:
             stream.write("$set\n")
             for constraint in constraints:
                 indices = " ".join(str(index + 1) for index in constraint["atoms"])

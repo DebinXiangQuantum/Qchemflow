@@ -190,6 +190,8 @@ def classical_energy(data: MolecularData, method: str, store: ArtifactStore,
         h1 = store.get(data.hamiltonian.h1_ref)
         eri = store.get(data.hamiltonian.h2_ref)
         molecule = gto.M(verbose=0)
+        # Integrals only: keep PySCF on in-core paths (its out-of-core paths need a real basis).
+        molecule.incore_anyway = True
         molecule.nelectron = data.sector.n_alpha + data.sector.n_beta
         molecule.spin = data.sector.n_alpha - data.sector.n_beta
         reference = scf.ROHF(molecule) if molecule.spin else scf.RHF(molecule)

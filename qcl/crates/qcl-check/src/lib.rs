@@ -1,3 +1,4 @@
+use qcl_ir::primitives::primitive;
 use qcl_ir::{Graph, Node, NodeKind, ValueType};
 use serde::Serialize;
 
@@ -120,99 +121,35 @@ pub fn check(graph: &Graph) -> Vec<Diagnostic> {
                     hint: "Use cpu0 or a local gpuN ordinal".into(),
                 });
             }
-            if (matches!(
-                node.op.as_str(),
-                "active_space"
-                    | "qubit_hamiltonian"
-                    | "sqd.diagonalize"
-                    | "int2e"
-                    | "int1e"
-                    | "int3c"
-                    | "cholesky"
-                    | "periodic.scf"
-                    | "dynamics.spectral_exact"
-                    | "solubility.esol"
-                    | "solubility.gse"
-                    | "superconductivity.allen_dynes"
-                    | "metabolism.sites"
-                    | "binding.mmgbsa"
-                    | "geometry.optimize"
-                    | "sella.saddle"
-                    | "geometry.constrained_optimize"
-                    | "geometry.fd_optimize"
-                    | "irc"
-                    | "frequencies"
-                    | "frequencies.from_hessian"
-                    | "thermo.rrho"
-                    | "thermo.eyring"
-                    | "ccsd.amplitudes"
-                    | "sci.solve"
-                    | "gfn2.energy"
-                    | "gfn2.optimize"
-                    | "rdkit.embed"
-                    | "rdkit.mmff_optimize"
-                    | "rdkit.dedupe"
-            ) && device.kind != "cpu")
-                || (matches!(
-                    node.op.as_str(),
-                    "contract"
-                        | "eigh"
-                        | "orthogonalize"
-                        | "solve"
-                        | "svd"
-                        | "transform"
-                        | "gradient"
-                        | "hessian"
-                ) && !matches!(device.kind.as_str(), "cpu" | "gpu"))
-                || (scf_operation && device.kind != "cpu" && !gpu_scf_supported)
-                || (matches!(
-                    node.op.as_str(),
-                    "fci.solve" | "ed.ground_state" | "expect" | "mp2" | "rdm1" | "rdm2" | "sigma"
-                ) && !matches!(device.kind.as_str(), "cpu" | "gpu"))
-                || (node.op == "fci.solve"
-                    && node.params.get("engine").and_then(|value| value.as_str()) == Some("native")
-                    && device.kind != "cpu")
-                || (node.op == "sigma"
-                    && node.params.get("engine").and_then(|value| value.as_str()) == Some("native")
-                    && device.kind != "cpu")
-            {
-                diagnostics.push(Diagnostic {
-                    code: "QCL-E203",
-                    source: node.source.clone(),
-                    message: format!("{} has no {} implementation", node.op, device.kind),
-                    hint: if matches!(
-                        node.op.as_str(),
-                        "fci.solve"
-                            | "ed.ground_state"
-                            | "expect"
-                            | "mp2"
-                            | "rdm1"
-                            | "rdm2"
-                            | "sigma"
-                            | "contract"
-                            | "eigh"
-                            | "orthogonalize"
-                            | "solve"
-                            | "svd"
-                            | "transform"
-                            | "gradient"
-                            | "hessian"
-                    ) {
-                        if matches!(node.op.as_str(), "fci.solve" | "sigma")
-                            && node.params.get("engine").and_then(|value| value.as_str())
-                                == Some("native")
-                        {
-                            "Native CI is available on CPU only"
-                        } else {
-                            "Available device kinds: cpu, gpu"
-                        }
-                    } else if scf_operation {
-                        "HF/KS without an ERI override supports cpu and gpu"
-                    } else {
-                        "Available device kinds: cpu"
+            if node.kind == NodeKind::Compute {
+                let native_engine = matches!(node.op.as_str(), "fci.solve" | "sigma")
+                    && node.params.get("engine").and_then(|value| value.as_str()) == Some("native");
+                let unavailable = match primitive(&node.op) {
+                    None => Some((
+                        format!("{} is not a registered primitive", node.op),
+                        "Declare it in qcl-ir/primitives.toml with a worker implementation"
+                            .to_string(),
+                    )),
+                    Some(_) if native_engine && device.kind != "cpu" => Some((
+                        format!("{} has no {} implementation", node.op, device.kind),
+                        "Native CI is available on CPU only".to_string(),
+                    )),
+                    Some(spec) if !spec.supports(&device.kind) => {
+                        Some(spec.unavailable(&node.op, &device.kind))
                     }
-                    .into(),
-                });
+                    Some(spec) if scf_operation && device.kind == "gpu" && !gpu_scf_supported => {
+                        Some(spec.unavailable(&node.op, &device.kind))
+                    }
+                    Some(_) => None,
+                };
+                if let Some((message, hint)) = unavailable {
+                    diagnostics.push(Diagnostic {
+                        code: "QCL-E203",
+                        source: node.source.clone(),
+                        message,
+                        hint,
+                    });
+                }
             }
             if node.kind == NodeKind::Copy && device.kind == "qpu" {
                 diagnostics.push(Diagnostic {
@@ -301,23 +238,8 @@ pub fn check(graph: &Graph) -> Vec<Diagnostic> {
                     }
                 }
             }
-            if node.op == "sample" && device.kind != "qpu" {
-                diagnostics.push(Diagnostic {
-                    code: "QCL-E203",
-                    source: node.source.clone(),
-                    message: "sample requires a QPU or QPU simulator".into(),
-                    hint: "Available device kinds: qpu".into(),
-                });
-            }
             if node.op == "estimate.quantum" {
-                if device.kind != "qpu" {
-                    diagnostics.push(Diagnostic {
-                        code: "QCL-E203",
-                        source: node.source.clone(),
-                        message: "Pauli estimate requires a QPU or QPU simulator".into(),
-                        hint: "Place the estimate on a QPU device".into(),
-                    });
-                } else {
+                if device.kind == "qpu" {
                     let kernel_node = node.inputs.get(1).and_then(|id| original_node(graph, *id));
                     let custom_unitary = kernel_node.is_some_and(|kernel| {
                         kernel.op == "kernel.custom"
@@ -485,14 +407,7 @@ pub fn check(graph: &Graph) -> Vec<Diagnostic> {
                 }
             }
             if node.op == "vqe.sampled" {
-                if device.kind != "qpu" {
-                    diagnostics.push(Diagnostic {
-                        code: "QCL-E203",
-                        source: node.source.clone(),
-                        message: "Sampled VQE requires a QPU or QPU simulator".into(),
-                        hint: "Place the VQE estimate on a QPU device".into(),
-                    });
-                } else {
+                if device.kind == "qpu" {
                     let supported_simulator = device.simulator_method.as_deref()
                         == Some("statevector")
                         && device.simulator_host.as_deref() == Some("cpu0")

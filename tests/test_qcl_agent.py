@@ -13,6 +13,11 @@ from chemflow.agent.task import TaskGate, TaskSpec, TaskStore
 from chemflow.diagnostics import AdapterError
 from chemflow.signing import TaskSigner, generate_keypair
 
+# HF-kernel estimates and VQE need a CPU-hosted statevector simulator; on a host with
+# GPUs, Cluster.local() hosts its simulators on the GPUs.
+CPU_SIMULATOR = qcl.Device("sim0", "qpu", qubits=20, simulator_host="cpu0",
+                           simulator_method="statevector")
+
 
 @qcl.workflow
 def energy(molecule, active, cpu):
@@ -958,7 +963,7 @@ def test_agent_runs_signed_simulator_vqe_with_exact_gate(tmp_path, monkeypatch):
     cluster = qcl.Cluster.local()
     review = agent.compile(vqe_energy,
                            qcl.Molecule("H 0 0 0; H 0 0 0.74", "sto-3g"),
-                           qcl.Active(2, 2), cluster.cpus[0], cluster.qpus[0])
+                           qcl.Active(2, 2), cluster.cpus[0], CPU_SIMULATOR)
     policy = tmp_path / "policy.toml"
     policy.write_text("[budget]\nqpu_shots = 1920\n")
     monkeypatch.setenv("QCL_POLICY_FILE", str(policy))
@@ -980,7 +985,7 @@ def test_agent_runs_signed_pauli_estimate_with_exact_gate(tmp_path, monkeypatch)
     cluster = qcl.Cluster.local()
     review = agent.compile(pauli_energy,
                            qcl.Molecule("H 0 0 0; H 0 0 0.74", "sto-3g"),
-                           qcl.Active(2, 2), cluster.cpus[0], cluster.qpus[0])
+                           qcl.Active(2, 2), cluster.cpus[0], CPU_SIMULATOR)
     policy = tmp_path / "policy.toml"
     policy.write_text("[budget]\nqpu_shots = 640\n")
     monkeypatch.setenv("QCL_POLICY_FILE", str(policy))

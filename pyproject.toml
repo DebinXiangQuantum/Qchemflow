@@ -47,6 +47,13 @@ gpu = [
     "cupy-cuda12x>=14; sys_platform == 'linux'",
     "gpu4pyscf-cuda12x==1.8.1; sys_platform == 'linux'",
 ]
+# The same GPU stack built for CUDA 13 (driver 580+). Use it instead of `gpu` when the
+# environment also holds CUDA 13 wheels, such as the torch that the `mlp` extra installs,
+# so that CuPy, GPU4PySCF and torch share one CUDA runtime.
+gpu-cuda13 = [
+    "cupy-cuda13x>=14; sys_platform == 'linux'",
+    "gpu4pyscf-cuda13x==1.8.1; sys_platform == 'linux'",
+]
 reactions = [
     "geometric>=1.1",
 ]
@@ -67,7 +74,9 @@ docking = [
     "vina>=1.2.7; sys_platform == 'linux'",
 ]
 xtb = [
-    "tblite>=0.7",  # GFN2-xTB (G2)
+    # GFN2-xTB (G2). References and NEB settings were validated on 0.7; with 0.8 the
+    # HCN/HNC climbing-image NEB no longer converges.
+    "tblite>=0.7,<0.8",
     "ase>=3.23",
 ]
 mlp = [

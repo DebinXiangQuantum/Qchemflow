@@ -11,7 +11,7 @@ def load_calibration(backend: str = "MQ02") -> dict:
     if backend != "MQ02":
         raise ValueError(f"Unknown calibration: {backend}")
     return json.loads(files("chemflow.backends.data").joinpath(
-        "mq02_calibration_20260925.json").read_text())
+        "mq02_calibration_20260925.json").read_text(encoding="utf-8"))
 
 
 def best_layout(config: dict, n: int) -> list[int]:

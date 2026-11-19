@@ -35,12 +35,12 @@ class Pricing:
 
 
 def load_pricing(backend: str = "MQ02") -> Pricing:
-    data = json.loads(files("chemflow.backends.data").joinpath("lqcloud_pricing.json").read_text())
+    data = json.loads(files("chemflow.backends.data").joinpath("lqcloud_pricing.json").read_text(encoding="utf-8"))
     return Pricing(**data[backend])
 
 
 def load_resources(backend: str = "MQ02") -> dict:
-    data = json.loads(files("chemflow.backends.data").joinpath("lqcloud_resources.json").read_text())
+    data = json.loads(files("chemflow.backends.data").joinpath("lqcloud_resources.json").read_text(encoding="utf-8"))
     return data[backend]
 
 
@@ -119,7 +119,7 @@ class LqcloudBackend:
         if abandon == bool(job_id) or not re.fullmatch(r"[0-9a-f]{64}", key):
             raise ValueError("Choose exactly one reconciliation action and a valid key")
         path = self.state_dir / f"{key}.json"
-        record = json.loads(path.read_text())
+        record = json.loads(path.read_text(encoding="utf-8"))
         if abandon:
             record.update(state="abandoned", updated=_now())
             _write(path, record)
@@ -142,7 +142,7 @@ class LqcloudBackend:
         path = self.record_path(prep, shots, repetition)
         key = path.stem
         if path.exists():
-            record = json.loads(path.read_text())
+            record = json.loads(path.read_text(encoding="utf-8"))
             if record["state"] == "completed":
                 return self._output(prep, shots, seed, record, charged=False)
             if record["state"] in ("rejected", "failed"):

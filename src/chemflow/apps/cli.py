@@ -44,17 +44,17 @@ def run(args):
         path = Path(filename)
         suffix = path.suffix.lower()
         if suffix == ".json":
-            inputs.update(json.loads(path.read_text()))
+            inputs.update(json.loads(path.read_text(encoding="utf-8")))
         elif suffix == ".pdb":
-            inputs["receptor"] = {"pdb_text": path.read_text()}
+            inputs["receptor"] = {"pdb_text": path.read_text(encoding="utf-8")}
         elif suffix in (".smi", ".smiles"):
-            text = path.read_text().strip()
+            text = path.read_text(encoding="utf-8").strip()
             if args.app_id == "protein_ligand_binding":
                 inputs["ligand"] = {"smiles": text}
             else:
                 inputs["smiles"] = text
         elif args.app_id == "protein_ligand_binding" and suffix == ".sdf":
-            inputs["ligand"] = {"sdf": path.read_text()}
+            inputs["ligand"] = {"sdf": path.read_text(encoding="utf-8")}
         elif args.app_id == "stability_ranking":
             inputs.setdefault("items", []).append({"name": path.stem, "molecule": str(path)})
         else:

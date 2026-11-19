@@ -49,7 +49,7 @@ def _training():
     from rdkit.Chem import rdFingerprintGenerator
 
     path = files("chemflow").joinpath("data/esol/delaney-processed.csv")
-    rows = list(csv.DictReader(path.read_text().splitlines()))
+    rows = list(csv.DictReader(path.read_text(encoding="utf-8").splitlines()))
     molecules = [molecule(row["smiles"]) for row in rows]
     features = np.array([[1.0, *descriptors(parsed)] for parsed in molecules])
     target = np.array([float(row["measured log solubility in mols per litre"]) for row in rows])

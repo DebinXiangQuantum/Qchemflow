@@ -31,7 +31,7 @@ def project_hashes(formal):
 
 
 def mathlib_revision(formal):
-    packages = json.loads((formal / "lake-manifest.json").read_text())["packages"]
+    packages = json.loads((formal / "lake-manifest.json").read_text(encoding="utf-8"))["packages"]
     return next(package["rev"] for package in packages if package["name"] == "mathlib")
 
 
@@ -50,10 +50,10 @@ def checked_lemmas(used):
     if not required:
         return set()
     try:
-        manifest = json.loads((FORMAL / "manifest.json").read_text())
+        manifest = json.loads((FORMAL / "manifest.json").read_text(encoding="utf-8"))
         if (manifest["schema_version"] != 1 or manifest["sources"] != source_hashes(FORMAL) or
                 manifest["project"] != project_hashes(FORMAL) or
-                manifest["lean_toolchain"] != (FORMAL / "lean-toolchain").read_text().strip() or
+                manifest["lean_toolchain"] != (FORMAL / "lean-toolchain").read_text(encoding="utf-8").strip() or
                 manifest["mathlib_revision"] != mathlib_revision(FORMAL)):
             raise ValueError("Formal manifest does not match current Lean sources/toolchain")
         entries = manifest["theorems"]
@@ -66,7 +66,7 @@ def checked_lemmas(used):
             filename = entry["file"]
             if filename not in manifest["sources"]:
                 raise ValueError(f"Unaudited theorem source: {name}")
-            statement = theorem_statement((FORMAL / filename).read_text(), lemma["lean"])
+            statement = theorem_statement((FORMAL / filename).read_text(encoding="utf-8"), lemma["lean"])
             if (entry["lemma"] != name or entry["lemma_sha256"] != lemma_hash(lemma) or
                     entry["source_sha256"] != manifest["sources"][filename] or
                     entry["statement"] != statement or

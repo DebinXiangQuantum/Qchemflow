@@ -65,7 +65,7 @@ _PARAMETERS = {
 
 def catalog():
     """Return independent catalogue records with declared input formats and defaults."""
-    examples = json.loads(files(__package__).joinpath("examples/inputs.json").read_text())
+    examples = json.loads(files(__package__).joinpath("examples/inputs.json").read_text(encoding="utf-8"))
     return [{"id": identifier, "name_zh": chinese, "name_en": english,
              "description": description, "target_kinds": list(kinds),
              "inputs": ({"smiles": "SMILES text"} if identifier in
@@ -87,7 +87,7 @@ def _molecule(value):
         raise TypeError("Provide a molecule dictionary, XYZ/SDF path, or SMILES")
     path = Path(value)
     if path.suffix.lower() == ".xyz" and path.is_file():
-        lines = path.read_text().splitlines()
+        lines = path.read_text(encoding="utf-8").splitlines()
         count = int(lines[0])
         if len(lines[2:]) != count:
             raise ValueError("XYZ atom count differs from its header")
@@ -227,10 +227,10 @@ def draft(app_id, inputs=None, parameters=None, example=False):
     elif app_id == "protein_ligand_binding":
         receptor = data["receptor"]
         if isinstance(receptor, str):
-            receptor = {"pdb_text": Path(receptor).read_text()}
+            receptor = {"pdb_text": Path(receptor).read_text(encoding="utf-8")}
         elif "example_file" in receptor:
             receptor = {"pdb_text": files(__package__).joinpath(
-                "examples/" + receptor["example_file"]).read_text()}
+                "examples/" + receptor["example_file"]).read_text(encoding="utf-8")}
         source = deepcopy(data["ligand"])
         if "residue" in source:
             source.setdefault("pdb_text", receptor["pdb_text"])

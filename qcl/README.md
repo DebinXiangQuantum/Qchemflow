@@ -73,6 +73,11 @@ QCL_POLICY_FILE=qcl/apps/local-policy.toml .venv/bin/python qcl/apps/h2_lucj_sqd
 ```
 
 GPU FCI, HF and KS DFT require ChemFlow's `gpu` extra and a CUDA device.
+Use the `gpu-cuda13` extra instead when the environment also holds CUDA 13
+wheels (the torch that `mlp` installs), so that CuPy, GPU4PySCF and torch share
+one CUDA runtime. The worker resolves NVRTC from the wheels before GPU4PySCF
+loads any system CUDA library, and imports GPU4PySCF in single-device mode so
+that each SCF stays on the GPU it was placed on.
 GPU HF/DFT use GPU4PySCF; GPU SCF results can be copied to a CPU lane.
 GPU HF/PCM and DFT/PCM-SMD are registered; GPU SCF with a precomputed ERI
 override is not.
@@ -359,3 +364,20 @@ Open-shell reference matching and multi-device GPU gradients remain open.
 existing Sella adapter. `path.connects(reactant, product)` is a deferred host
 predicate suitable for `qcl.require`; the path can also be returned as a
 `ReactionPath`. IRC currently supports one CPU lane and closed-shell HF.
+
+## Adding a primitive
+
+1. Declare it in `crates/qcl-ir/primitives.toml`: `kind`, `output`, and for a
+   compute operation the device kinds that have an implementation.
+2. Add the frontend function in `python/qcl/_frontend.py`. New functions can
+   use `GraphBuilder.add_node(op, inputs, params_json, source)`, which takes the
+   node kind and output type from the table.
+3. Register the worker implementation in the matching `python/qcl/_impls/`
+   module with `@implements("<op>")`. The handler receives the execution
+   context, node, node id, operation name and resolved inputs, and stores its
+   result in `ctx.values[identifier]`.
+4. If availability depends on inputs (open shells, engines, widths), add the
+   conditional rule in `crates/qcl-check`.
+
+`qcl/tests/test_primitives.py` fails when the table, the handlers and the
+checker disagree. `qcl.primitives()` returns the table as a dictionary.

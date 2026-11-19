@@ -18,6 +18,12 @@ fn solvent_params(
 }
 
 #[pyfunction]
+fn primitives_json() -> PyResult<String> {
+    serde_json::to_string(qcl_ir::primitives::primitives())
+        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))
+}
+
+#[pyfunction]
 fn parse_cluster_json(source: &str) -> PyResult<String> {
     let cluster = qcl_cluster::parse(source).map_err(pyo3::exceptions::PyValueError::new_err)?;
     serde_json::to_string(&cluster)
@@ -2010,6 +2016,47 @@ impl GraphBuilder {
             .map_err(pyo3::exceptions::PyValueError::new_err)
     }
 
+    /// Add a node for any op declared in primitives.toml. Kind and output type come from
+    /// the table; argument types are the frontend function's responsibility.
+    fn add_node(
+        &mut self,
+        op: String,
+        inputs: Vec<usize>,
+        params_json: String,
+        source: String,
+    ) -> PyResult<usize> {
+        let spec = qcl_ir::primitives::primitive(&op).ok_or_else(|| {
+            pyo3::exceptions::PyValueError::new_err(format!(
+                "{op} is not declared in primitives.toml"
+            ))
+        })?;
+        let mut input_types = Vec::with_capacity(inputs.len());
+        for id in &inputs {
+            let node = self
+                .graph
+                .nodes
+                .get(*id)
+                .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Unknown value"))?;
+            input_types.push(node.value_type.clone());
+        }
+        let value_type = spec.output_for(&input_types).ok_or_else(|| {
+            pyo3::exceptions::PyTypeError::new_err(format!(
+                "{op} takes its output type from input {}, which is missing",
+                spec.output_from
+            ))
+        })?;
+        let params: serde_json::Value = serde_json::from_str(&params_json)
+            .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+        Ok(self
+            .graph
+            .add(&op, spec.kind.clone(), value_type, inputs, params, source))
+    }
+
+    /// Nodes that disagree with primitives.toml; empty for a consistent graph.
+    fn primitive_mismatches(&self) -> Vec<String> {
+        qcl_ir::primitives::mismatches(&self.graph)
+    }
+
     fn diagnostics_json(&self) -> PyResult<String> {
         serde_json::to_string(&qcl_check::check(&self.graph))
             .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))
@@ -2051,6 +2098,7 @@ impl GraphBuilder {
 fn _qcl(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<GraphBuilder>()?;
     module.add_function(wrap_pyfunction!(parse_cluster_json, module)?)?;
+    module.add_function(wrap_pyfunction!(primitives_json, module)?)?;
     module.add_function(wrap_pyfunction!(ci_ground_energy, module)?)?;
     module.add_function(wrap_pyfunction!(ci_ground_state, module)?)?;
     module.add_function(wrap_pyfunction!(ci_sigma, module)?)?;

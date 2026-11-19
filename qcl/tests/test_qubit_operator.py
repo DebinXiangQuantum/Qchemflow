@@ -2,6 +2,11 @@ import pytest
 
 import qcl
 
+# HF-kernel estimates and VQE run on a CPU-hosted statevector simulator. On a host with
+# GPUs, Cluster.local() hosts its simulators on the GPUs, so name the CPU one explicitly.
+CPU_SIMULATOR = qcl.Device("sim0", "qpu", qubits=20, simulator_host="cpu0",
+                           simulator_method="statevector")
+
 
 @qcl.workflow
 def mapped_h2(molecule, active, cpu):
@@ -68,7 +73,7 @@ def test_vqe_accepts_explicit_qubit_operator(tmp_path, monkeypatch):
     policy = tmp_path / "policy.toml"
     policy.write_text("[budget]\nqpu_shots = 1920\n")
     monkeypatch.setenv("QCL_POLICY_FILE", str(policy))
-    plan = mapped_vqe.compile(*_inputs(), qcl.Cluster.local().qpus[0])
+    plan = mapped_vqe.compile(*_inputs(), CPU_SIMULATOR)
     assert plan.estimate()["shots"] == 1920
     result = plan.run(timeout_s=120)
     assert result.value < -1.0

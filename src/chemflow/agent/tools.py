@@ -277,7 +277,7 @@ class PlanStore:
         if self.directory is not None:
             if len(identifier) != 32 or any(char not in "0123456789abcdef" for char in identifier):
                 raise KeyError(identifier)
-            plan = Program.model_validate_json((self.directory / f"{identifier}.json").read_text())
+            plan = Program.model_validate_json((self.directory / f"{identifier}.json").read_text(encoding="utf-8"))
         else:
             plan = self._plans[identifier].model_copy(deep=True)
         if plan.gates:

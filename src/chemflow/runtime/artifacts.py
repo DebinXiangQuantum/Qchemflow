@@ -16,7 +16,7 @@ def write_text_artifact(text: str, suffix: str = ".txt") -> str:
 
 def read_text_artifact(ref) -> str:
     """Read a text artifact path, including the content-addressed preparation artifacts."""
-    return Path(ref).read_text()
+    return Path(ref).read_text(encoding="utf-8")
 
 
 class ArtifactStore:

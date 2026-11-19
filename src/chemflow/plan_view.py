@@ -75,7 +75,7 @@ def show_stored_plan(plan_id, plan_dir, qpu=None):
     ledger = None
     context_path = plan_dir / f"{plan_id}.resources.json"
     if context_path.exists():
-        context = json.loads(context_path.read_text())
+        context = json.loads(context_path.read_text(encoding="utf-8"))
         ledger = BudgetLedger(context["budget"],
                               plan_dir / f"{context['task_hash']}.ledger.json")
     return show_plan(plan, registry, plan_id=plan_id, ledger=ledger)

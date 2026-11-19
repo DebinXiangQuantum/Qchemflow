@@ -277,6 +277,8 @@ def _control_adapter(method):
         if (hamiltonian.space.frozen_orbitals or
                 hamiltonian.space.n_orb != hamiltonian.mol.nao_nr()):
             mol = gto.M(verbose=0)
+            # Integrals only: keep PySCF on in-core paths (its out-of-core paths need a real basis).
+            mol.incore_anyway = True
             mol.nelectron = sector["n_alpha"] + sector["n_beta"]
             mol.spin = sector["n_alpha"] - sector["n_beta"]
             mf = scf.UHF(mol)

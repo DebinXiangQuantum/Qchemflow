@@ -21,7 +21,7 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any, get_type_hints
 
-from qcl._qcl import CI_MAX_DETERMINANTS, GraphBuilder, parse_cluster_json
+from qcl._qcl import CI_MAX_DETERMINANTS, GraphBuilder, parse_cluster_json, primitives_json
 from qcl._tensor_units import product_unit
 
 
@@ -84,7 +84,7 @@ class Cluster:
 
     @classmethod
     def load(cls, path: str | Path) -> Cluster:
-        config = json.loads(parse_cluster_json(Path(path).read_text()))
+        config = json.loads(parse_cluster_json(Path(path).read_text(encoding="utf-8")))
         quantum_links = tuple(tuple(link["between"])
                               for link in config["quantum_link"])
         return cls(
@@ -533,6 +533,14 @@ class CompileError(Exception):
             self.diagnostics.append(enriched)
         super().__init__("; ".join(f"{item['code']}: {item['message']}"
                                   for item in self.diagnostics))
+
+
+def primitives() -> dict[str, dict[str, Any]]:
+    """Return the primitive table: node kind, output type and device kinds per op.
+
+    The table is declared once in qcl-ir/primitives.toml and embedded in the compiler.
+    """
+    return json.loads(primitives_json())
 
 
 _active_graph: ContextVar[GraphBuilder | None] = ContextVar("qcl_graph", default=None)
@@ -3494,7 +3502,7 @@ class Plan:
         if not path:
             return None
         try:
-            policy = tomllib.loads(Path(path).read_text())
+            policy = tomllib.loads(Path(path).read_text(encoding="utf-8"))
             limits = policy.get("budget", {})
             duration = limits.get("wall_time")
         except (OSError, tomllib.TOMLDecodeError, AttributeError) as error:
@@ -3534,7 +3542,7 @@ class Plan:
                                  "message": "QPU resource policy is missing",
                                  "hint": "Set QCL_POLICY_FILE to an operator policy"}])
         try:
-            policy = tomllib.loads(Path(policy_path).read_text())
+            policy = tomllib.loads(Path(policy_path).read_text(encoding="utf-8"))
         except (OSError, tomllib.TOMLDecodeError) as error:
             raise CompileError([{"code": "QCL-E301", "source": jobs[0]["source"],
                                  "message": "QPU resource policy cannot be read",
@@ -3813,6 +3821,10 @@ class Workflow:
         finally:
             _active_graph.reset(token)
             _active_patterns.reset(pattern_token)
+        mismatches = graph.primitive_mismatches()
+        if mismatches:
+            raise RuntimeError("QCL internal error: graph disagrees with primitives.toml: "
+                               + "; ".join(mismatches))
         diagnostics = json.loads(graph.diagnostics_json())
         if budget is not None and budget.qpu_cost is not None and not any(
                 node["kind"] == "compute" and node["device"] is not None and
