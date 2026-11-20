@@ -106,7 +106,9 @@ pub fn parse(source: &str) -> Result<BTreeMap<String, Primitive>, String> {
                 ));
             }
         } else if primitive.relation_param.is_some() || !primitive.relations.is_empty() {
-            return Err(format!("{op}: relation_param and relations need relation = \"param\""));
+            return Err(format!(
+                "{op}: relation_param and relations need relation = \"param\""
+            ));
         }
         if let Some(name) = primitive
             .relations

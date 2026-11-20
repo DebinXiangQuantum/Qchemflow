@@ -9,8 +9,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::primitives::primitive;
 use crate::Graph;
+use crate::primitives::primitive;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
@@ -143,7 +143,11 @@ pub fn infer(graph: &Graph) -> Vec<Option<Relation>> {
                 "scale" => {
                     let factor = node.params.get("factor").and_then(|value| value.as_f64())?;
                     let source = input(0)?;
-                    Some(if factor < 0.0 { source.negated() } else { source })
+                    Some(if factor < 0.0 {
+                        source.negated()
+                    } else {
+                        source
+                    })
                 }
                 "decreasing" => Some(input(0)?.negated()),
                 "meet" => {
@@ -158,7 +162,9 @@ pub fn infer(graph: &Graph) -> Vec<Option<Relation>> {
                 "param" => {
                     let key = spec.relation_param.as_deref()?;
                     let value = node.params.get(key)?.as_str()?;
-                    spec.relations.get(value).and_then(|name| Relation::parse(name))
+                    spec.relations
+                        .get(value)
+                        .and_then(|name| Relation::parse(name))
                 }
                 _ => None,
             }
@@ -176,13 +182,28 @@ mod tests {
     #[test]
     fn composition_matches_the_chemflow_relation_table() {
         assert_eq!(Equivalent.difference(Equivalent), Equivalent);
-        assert_eq!(VariationalUpperBound.difference(Equivalent), VariationalUpperBound);
+        assert_eq!(
+            VariationalUpperBound.difference(Equivalent),
+            VariationalUpperBound
+        );
         assert_eq!(Equivalent.difference(VariationalUpperBound), Approximate);
-        assert_eq!(VariationalUpperBound.difference(VariationalUpperBound), Approximate);
-        assert_eq!(StochasticEstimate.difference(Equivalent), StochasticEstimate);
-        assert_eq!(StochasticEstimate.difference(VariationalUpperBound), Approximate);
+        assert_eq!(
+            VariationalUpperBound.difference(VariationalUpperBound),
+            Approximate
+        );
+        assert_eq!(
+            StochasticEstimate.difference(Equivalent),
+            StochasticEstimate
+        );
+        assert_eq!(
+            StochasticEstimate.difference(VariationalUpperBound),
+            Approximate
+        );
         assert_eq!(ModelChange.difference(Equivalent), ModelChange);
-        assert_eq!(VariationalUpperBound.sum(VariationalUpperBound), VariationalUpperBound);
+        assert_eq!(
+            VariationalUpperBound.sum(VariationalUpperBound),
+            VariationalUpperBound
+        );
         assert_eq!(Equivalent.meet(VariationalUpperBound), Approximate);
     }
 
