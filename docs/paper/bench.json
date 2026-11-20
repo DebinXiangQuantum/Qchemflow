@@ -1,0 +1,126 @@
+{
+ "sequential_auto_1010": {
+  "wall_s": 13.973767917021178,
+  "busy_s": 12.114033514051698,
+  "predicted_s": null,
+  "speedup": 1.0,
+  "max_deviation": 0.0,
+  "slots": null
+ },
+ "lanes_off_1010": {
+  "wall_s": 12.041172881028615,
+  "busy_s": 18.69804662594106,
+  "predicted_s": 11.150829774368612,
+  "speedup": 1.1604989028134833,
+  "max_deviation": 5.684341886080802e-14,
+  "slots": {
+   "cpu0": 1,
+   "gpu0": 1,
+   "gpu1": 1,
+   "gpu2": 1,
+   "gpu3": 1,
+   "host": 1,
+   "sim-ideal": 1,
+   "sim-standin": 1
+  }
+ },
+ "compiled_off_1010": {
+  "wall_s": 15.33964468492195,
+  "busy_s": 131.08627271431033,
+  "predicted_s": 1.772841985073246,
+  "speedup": 0.9109577310324954,
+  "max_deviation": 8.526512829121202e-14,
+  "slots": {
+   "cpu0": 16,
+   "gpu0": 1,
+   "gpu1": 1,
+   "gpu2": 1,
+   "gpu3": 1,
+   "host": 8,
+   "sim-ideal": 4,
+   "sim-standin": 4
+  }
+ },
+ "compiled_on_1010": {
+  "wall_s": 10.727808112977073,
+  "busy_s": 17.066898557939567,
+  "predicted_s": 1.772841985073246,
+  "speedup": 1.3025743721233767,
+  "max_deviation": 1.1368683772161603e-13,
+  "slots": {
+   "cpu0": 16,
+   "gpu0": 1,
+   "gpu1": 1,
+   "gpu2": 1,
+   "gpu3": 1,
+   "host": 8,
+   "sim-ideal": 4,
+   "sim-standin": 4
+  }
+ },
+ "sequential_auto_1212": {
+  "wall_s": 164.48146400600672,
+  "busy_s": 162.4575928307604,
+  "predicted_s": null,
+  "speedup": 1.0,
+  "max_deviation": 0.0,
+  "slots": null
+ },
+ "lanes_off_1212": {
+  "wall_s": 150.11594881897327,
+  "busy_s": 171.9919418138452,
+  "predicted_s": 76.912302915664,
+  "speedup": 1.0956961288927203,
+  "max_deviation": 9.947598300641403e-14,
+  "slots": {
+   "cpu0": 1,
+   "gpu0": 1,
+   "gpu1": 1,
+   "host": 1,
+   "sim-ideal": 1,
+   "sim-standin": 1
+  }
+ },
+ "compiled_off_1212": {
+  "wall_s": 150.67684225994162,
+  "busy_s": 192.05245192418806,
+  "predicted_s": 76.89547317320536,
+  "speedup": 1.091617408083519,
+  "max_deviation": 9.947598300641403e-14,
+  "slots": {
+   "cpu0": 8,
+   "gpu0": 1,
+   "gpu1": 1,
+   "host": 8,
+   "sim-ideal": 2,
+   "sim-standin": 2
+  }
+ },
+ "compiled_on_1212": {
+  "wall_s": 151.30030663800426,
+  "busy_s": 164.17383007681929,
+  "predicted_s": 76.89547317320536,
+  "speedup": 1.08711917153968,
+  "max_deviation": 9.947598300641403e-14,
+  "slots": {
+   "cpu0": 8,
+   "gpu0": 1,
+   "gpu1": 1,
+   "host": 8,
+   "sim-ideal": 2,
+   "sim-standin": 2
+  }
+ },
+ "mq02_sequential_1010": {
+  "wall_s": 80.371856614016,
+  "busy_s": 77.55271757696755,
+  "predicted_s": null,
+  "speedup": 1.0
+ },
+ "mq02_compiled_1010": {
+  "wall_s": 37.99218657496385,
+  "busy_s": 104.29451617621817,
+  "predicted_s": 15.79666065319704,
+  "speedup": 2.115483836536525
+ }
+}

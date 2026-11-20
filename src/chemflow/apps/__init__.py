@@ -39,6 +39,17 @@ _ROWS = (
      ("Finite-cluster s-wave pair and spin correlations and energy. Tc for unconventional "
       "superconductors is not predicted; Allen-Dynes is only for user/EPW inputs.")),
 )
+# The QCL program (under qcl/apps in a source checkout) that implements each application.
+QCL_PROGRAMS = {
+    "ground_state_energy": "ground_state_energy.py", "stability_ranking": "stability_ranking.py",
+    "conformer_ranking": "conformer_ranking.py", "pes_scan": "pes_scan.py",
+    "metabolic_sites": "metabolic_sites.py", "bond_dissociation": "bond_dissociation.py",
+    "solvation_scan": "solvation_scan.py", "frontier_orbitals": "frontier_orbitals.py",
+    "aqueous_solubility": "aqueous_solubility.py", "reaction_barrier": "reaction_barrier.py",
+    "dimer_binding_scan": "dimer_binding_scan.py",
+    "protein_ligand_binding": "protein_ligand_binding.py",
+    "lattice_superconductivity": "hubbard_pairing.py",
+}
 _DEFAULTS = {
     "basis": "sto-3g", "error": 0.0016, "wall_s": 1800,
 }
@@ -76,6 +87,7 @@ def catalog():
                         "protein_ligand_binding" else
                         {"molecule": "xyz/sdf/smiles or atoms", "items": "optional molecules"}),
              "parameters": deepcopy({**_DEFAULTS, **_PARAMETERS[identifier]}),
+             "qcl_program": f"qcl/apps/{QCL_PROGRAMS[identifier]}",
              "example": deepcopy(examples[identifier])}
             for identifier, chinese, english, kinds, description in _ROWS]
 

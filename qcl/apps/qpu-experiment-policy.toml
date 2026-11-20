@@ -1,0 +1,9 @@
+# Operator policy for apps/qpu_sqd_experiment.py on lqcloud MQ02.
+# Shot limits count hardware and simulator shots; the cost cap is for MQ02 only.
+[budget]
+qpu_shots = 2000000
+wall_time = "6h"
+
+[cloud_qpu]
+qpu_cost = 400
+currency = "CNY"

@@ -11,9 +11,11 @@ spread over three device kinds:
 
 Every cross-device value is an explicit ``.to()`` copy; the plan is compiled
 with ``strict_transfers=True``, so an implicit transfer is a compile error.
-Bond lengths are dealt round-robin over (GPU, QPU) lanes. The SQD - CASCI
-difference is computed after the run: QCL refuses to subtract Estimates from
-different methods (QCL-E103), because the result would carry no method.
+Bond lengths are dealt round-robin over (GPU, QPU) lanes; ``--overlap`` runs the
+compiled schedule, so the lanes and the CPU work of different bond lengths
+overlap. The SQD - CASCI difference is computed after the run: QCL refuses to
+subtract Estimates from different methods (QCL-E103), because the result would
+carry no method.
 
 Run from the repository root with the bundled operator policy:
 
@@ -73,6 +75,8 @@ def main():
                         metavar=("ELECTRONS", "ORBITALS"),
                         help="active space (default: full valence, 10 8)")
     parser.add_argument("--json", help="write the curve with provenance to this file")
+    parser.add_argument("--overlap", action="store_true",
+                        help="run the compiled schedule: lanes overlap, CPU work in parallel")
     args = parser.parse_args()
 
     cluster = qcl.Cluster.load(args.cluster) if args.cluster else qcl.Cluster.local()
@@ -81,7 +85,11 @@ def main():
                             strict_transfers=True)
     print(plan.explain())
     print(plan.estimate())
-    curve = plan.run()
+    if args.overlap:
+        predicted = plan.schedule()["predicted"]
+        print(f"schedule: {predicted['makespan_s']:.1f} s predicted, "
+              f"{predicted['sequential_s']:.1f} s sequential")
+    curve = plan.run(overlap=args.overlap, timeout_s=7200)
 
     print(f"\n{'R/Å':>6} {'E(RHF)':>14} {'E(SQD)':>14} {'±':>8} {'E(CASCI)':>14} "
           f"{'SQD−CASCI/mEh':>14} {'subspace':>9}")
