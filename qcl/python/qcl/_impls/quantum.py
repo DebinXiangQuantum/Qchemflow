@@ -496,7 +496,9 @@ def _op_sqd_diagonalize(ctx, node, identifier, operation, inputs):
     extend = node["params"].get("extend", True)
     energy, diagnostics = sqd_sector(data, data.sector, store, samples,
                                      seed=node["params"]["seed"], recovery=recovery,
-                                     with_ext=extend)
+                                     with_ext=extend,
+                                     n_batches=node["params"].get("n_batches", 10),
+                                     max_iter=node["params"].get("max_iter", 5))
     batches = diagnostics["batch_energies"]
     variance = (float(np.var(batches, ddof=1) / len(batches))
                 if len(batches) > 1 else 0.0)

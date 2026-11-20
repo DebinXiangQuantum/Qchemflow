@@ -13,6 +13,15 @@
 #   message, hint
 #            optional QCL-E203 wording; the default is
 #            "<op> has no <kind> implementation" / "Available device kinds: ..."
+#   relation how the value relates to the exact answer of the question it states: one
+#            of equivalent | variational_upper_bound | stochastic_estimate |
+#            approximate | model_change, or a rule over the inputs: input | sum |
+#            difference | scale | decreasing | meet | param (see relations.rs).
+#            Electronic energies are related to the exact eigenvalue of their model
+#            Hamiltonian; model-defined properties (ESOL, MM/GBSA, ...) are equivalent
+#            to the model they implement.
+#   relation_param, relations
+#            for relation = "param": the parameter and its value -> relation table
 #
 # Adding an operation: declare it here, add the frontend function that builds the
 # node, and register a worker handler with @implements("<op>") in qcl/_impls/.
@@ -47,11 +56,13 @@ output = "boolean"
 kind = "host"
 output = "input"
 output_from = 1
+relation = "meet"
 
 ["map"]
 kind = "host"
 output = "collection"
 axis = "items"
+relation = "meet"
 
 ["scan"]
 kind = "host"
@@ -100,6 +111,7 @@ output = "bitstrings"
 ["copy"]
 kind = "copy"
 output = "input"
+relation = "input"
 
 # ---- projections of composite results -------------------------------------------
 ["collection.index"]
@@ -145,79 +157,103 @@ output = "tensor"
 ["scf.energy"]
 kind = "projection"
 output = "estimate"
+relation = "input"
 
 ["mp2.energy"]
 kind = "projection"
 output = "estimate"
+relation = "input"
 
 ["fci.energy"]
 kind = "projection"
 output = "estimate"
+relation = "input"
 
 ["sci.energy"]
 kind = "projection"
 output = "estimate"
+relation = "input"
+
+["classical.energy"]
+kind = "projection"
+output = "estimate"
+relation = "input"
 
 ["ed.energy"]
 kind = "projection"
 output = "estimate"
+relation = "input"
 
 ["scf.homo"]
 kind = "projection"
 output = "estimate"
+relation = "equivalent"
 
 ["scf.lumo"]
 kind = "projection"
 output = "estimate"
+relation = "equivalent"
 
 ["scf.homo_alpha"]
 kind = "projection"
 output = "estimate"
+relation = "equivalent"
 
 ["scf.lumo_alpha"]
 kind = "projection"
 output = "estimate"
+relation = "equivalent"
 
 ["scf.homo_beta"]
 kind = "projection"
 output = "estimate"
+relation = "equivalent"
 
 ["scf.lumo_beta"]
 kind = "projection"
 output = "estimate"
+relation = "equivalent"
 
 # ---- Estimate arithmetic and comparison (host) -----------------------------------
 ["estimate.add"]
 kind = "host"
 output = "estimate"
+relation = "sum"
 
 ["estimate.sub"]
 kind = "host"
 output = "estimate"
+relation = "difference"
 
 ["estimate.scale"]
 kind = "host"
 output = "estimate"
+relation = "scale"
 
 ["estimate.mean"]
 kind = "host"
 output = "estimate"
+relation = "sum"
 
 ["estimate.in_units"]
 kind = "host"
 output = "estimate"
+relation = "input"
 
 ["estimates.merge"]
 kind = "host"
 output = "estimate"
+relation = "sum"
 
 ["estimate.compare"]
 kind = "host"
 output = "comparison"
+relation = "meet"
 
 ["rank"]
 kind = "host"
 output = "ranking"
+relation = "meet"
 
 # ---- integrals and linear algebra -----------------------------------------------
 ["int1e"]
@@ -278,46 +314,54 @@ kind = "compute"
 output = "scf_result"
 devices = ["cpu", "gpu"]
 hint = "HF/KS without an ERI override supports cpu and gpu"
+relation = "variational_upper_bound"
 
 ["scf.hf"]
 kind = "compute"
 output = "scf_result"
 devices = ["cpu", "gpu"]
 hint = "HF/KS without an ERI override supports cpu and gpu"
+relation = "variational_upper_bound"
 
 ["scf.rohf"]
 kind = "compute"
 output = "scf_result"
 devices = ["cpu", "gpu"]
 hint = "HF/KS without an ERI override supports cpu and gpu"
+relation = "variational_upper_bound"
 
 ["scf.uhf"]
 kind = "compute"
 output = "scf_result"
 devices = ["cpu", "gpu"]
 hint = "HF/KS without an ERI override supports cpu and gpu"
+relation = "variational_upper_bound"
 
 ["dft.rks"]
 kind = "compute"
 output = "scf_result"
 devices = ["cpu", "gpu"]
 hint = "HF/KS without an ERI override supports cpu and gpu"
+relation = "model_change"
 
 ["dft.uks"]
 kind = "compute"
 output = "scf_result"
 devices = ["cpu", "gpu"]
 hint = "HF/KS without an ERI override supports cpu and gpu"
+relation = "model_change"
 
 ["mp2"]
 kind = "compute"
 output = "mp2_result"
 devices = ["cpu", "gpu"]
+relation = "approximate"
 
 ["periodic.scf"]
 kind = "compute"
 output = "estimate"
 devices = ["cpu"]
+relation = "equivalent"
 
 ["active_space"]
 kind = "compute"
@@ -335,11 +379,21 @@ devices = ["cpu"]
 kind = "compute"
 output = "fci_result"
 devices = ["cpu", "gpu"]
+relation = "equivalent"
+
+["classical.solve"]
+kind = "compute"
+output = "classical_result"
+devices = ["cpu"]
+relation = "param"
+relation_param = "method"
+relations = { hf = "variational_upper_bound", mp2 = "approximate", ccsd = "approximate", ccsd_t = "approximate" }
 
 ["sci.solve"]
 kind = "compute"
 output = "sci_result"
 devices = ["cpu"]
+relation = "variational_upper_bound"
 
 ["sigma"]
 kind = "compute"
@@ -360,16 +414,19 @@ devices = ["cpu", "gpu"]
 kind = "compute"
 output = "ground_state"
 devices = ["cpu", "gpu"]
+relation = "equivalent"
 
 ["expect"]
 kind = "compute"
 output = "estimate"
 devices = ["cpu", "gpu"]
+relation = "input"
 
 ["dynamics.spectral_exact"]
 kind = "compute"
 output = "spectral_estimate"
 devices = ["cpu"]
+relation = "equivalent"
 
 # ---- quantum execution ------------------------------------------------------------
 ["qubit_hamiltonian"]
@@ -392,6 +449,7 @@ devices = ["qpu"]
 axis = "measurement_groups"
 message = "Pauli estimate requires a QPU or QPU simulator"
 hint = "Place the estimate on a QPU device"
+relation = "stochastic_estimate"
 
 ["vqe.sampled"]
 kind = "compute"
@@ -399,11 +457,13 @@ output = "estimate"
 devices = ["qpu"]
 message = "Sampled VQE requires a QPU or QPU simulator"
 hint = "Place the VQE estimate on a QPU device"
+relation = "stochastic_estimate"
 
 ["sqd.diagonalize"]
 kind = "compute"
 output = "estimate"
 devices = ["cpu"]
+relation = "variational_upper_bound"
 
 # ---- geometry, derivatives and paths -------------------------------------------
 ["geometry.optimize"]
@@ -471,6 +531,7 @@ devices = ["cpu"]
 kind = "compute"
 output = "estimate"
 devices = ["cpu"]
+relation = "equivalent"
 
 ["gfn2.optimize"]
 kind = "compute"
@@ -481,34 +542,41 @@ devices = ["cpu"]
 kind = "compute"
 output = "estimate"
 devices = ["cpu"]
+relation = "equivalent"
 
 ["metabolism.sites"]
 kind = "compute"
 output = "site_scores"
 devices = ["cpu"]
+relation = "equivalent"
 
 ["solubility.esol"]
 kind = "compute"
 output = "estimate"
 devices = ["cpu"]
+relation = "equivalent"
 
 ["solubility.gse"]
 kind = "compute"
 output = "estimate"
 devices = ["cpu"]
+relation = "equivalent"
 
 # ---- post-processing -----------------------------------------------------------------
 ["thermo.rrho"]
 kind = "compute"
 output = "estimate"
 devices = ["cpu"]
+relation = "equivalent"
 
 ["thermo.eyring"]
 kind = "compute"
 output = "estimate"
 devices = ["cpu"]
+relation = "decreasing"
 
 ["superconductivity.allen_dynes"]
 kind = "compute"
 output = "estimate"
 devices = ["cpu"]
+relation = "equivalent"

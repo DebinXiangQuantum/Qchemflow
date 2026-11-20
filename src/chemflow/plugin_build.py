@@ -12,7 +12,7 @@ from pathlib import Path
 import yaml
 
 from chemflow.agent.tools import DESCRIPTIONS
-from chemflow.mcp import PROFILES
+from chemflow.mcp import PROFILES, QCL_PROFILE
 from chemflow.plugin_constants import AGENT_MCP_SCHEMA, AGENT_PLUGIN_SCHEMA
 from chemflow.signing import TaskVerifier
 
@@ -31,7 +31,8 @@ def _write(path: Path, value: str | dict) -> None:
 def _roles(profiles: str | None, target: str) -> list[str]:
     chosen = (profiles.split(",") if profiles else
               list(PROFILES[:-1]) if target == "claude-code" else ["designer"])
-    if not chosen or len(chosen) != len(set(chosen)) or any(role not in PROFILES for role in chosen):
+    if not chosen or len(chosen) != len(set(chosen)) or any(
+            role not in (*PROFILES, QCL_PROFILE) for role in chosen):
         raise ValueError("Invalid profile list")
     return chosen
 

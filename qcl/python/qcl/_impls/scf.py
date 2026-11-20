@@ -400,7 +400,8 @@ def _op_scf_homo(ctx, node, identifier, operation, inputs):
     }
 
 
-@implements("scf.energy", "mp2.energy", "fci.energy", "sci.energy", "ed.energy")
+@implements("scf.energy", "mp2.energy", "fci.energy", "sci.energy", "classical.energy",
+            "ed.energy")
 def _op_scf_energy(ctx, node, identifier, operation, inputs):
     values = ctx.values
     result = inputs[0]

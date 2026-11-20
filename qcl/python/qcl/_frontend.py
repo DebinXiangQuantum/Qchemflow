@@ -26,6 +26,7 @@ from qcl._qcl import (
     GraphBuilder,
     parse_cluster_json,
     primitives_json,
+    relations_json,
     schedule_json,
 )
 from qcl._tensor_units import product_unit
@@ -316,13 +317,17 @@ class PES:
 
 @dataclass(frozen=True)
 class PCM:
-    name: str
+    """IEF-PCM by solvent name, or by dielectric constant alone (``PCM(None, eps=...)``)."""
+
+    name: str | None
     eps: float | None = None
 
     def __post_init__(self) -> None:
         from pyscf.solvent.smd import solvent_db
 
-        if not isinstance(self.name, str) or not self.name:
+        if self.name is None and self.eps is None:
+            raise ValueError("PCM needs a solvent name or a dielectric constant")
+        if self.name is not None and (not isinstance(self.name, str) or not self.name):
             raise ValueError("PCM solvent name must be nonempty")
         eps = self.eps
         if eps is None:
@@ -707,8 +712,9 @@ class _Value:
     @property
     def energy(self) -> _Value:
         if self.kind not in ("scf_result", "mp2_result", "fci_result", "sci_result",
-                             "ground_state"):
-            raise TypeError("Only an SCF, MP2, CI or ground-state result has an energy projection")
+                             "classical_result", "ground_state"):
+            raise TypeError("Only an SCF, MP2, CI, classical or ground-state result has an "
+                            "energy projection")
         return _Value(self.graph, self.graph.energy(self.node_id, _source()),
                       "estimate", self.molecule, unit="hartree", family=self.family,
                       lattice=self.lattice)
@@ -840,8 +846,12 @@ class _Value:
             raise CompileError([{"code": "QCL-E102", "source": source,
                                  "message": "Estimate units differ",
                                  "hint": "Convert units explicitly with .in_units()"}])
-        mixed_rrho = (operation == "add" and
-                      {self.family, other.family} == {"FCI", "RRHO correction"})
+        # A thermal (RRHO) correction may be added once to any electronic energy.
+        families = [self.family, other.family]
+        electronic = next((family for family in families if family != "RRHO correction"),
+                          None)
+        mixed_rrho = (operation == "add" and families.count("RRHO correction") == 1 and
+                      electronic is not None and not electronic.endswith("+RRHO"))
         mixed_hf = ({self.family, other.family} <= {"HF", "RHF", "ROHF"})
         if ((self.family != other.family and not mixed_rrho and not mixed_hf) or
                 self.molecule is None or
@@ -853,8 +863,8 @@ class _Value:
                       self.graph.estimate_binary(operation, self.node_id,
                                                  other.node_id, source),
                       "estimate", self.molecule, unit=self.unit,
-                      family=("FCI+RRHO" if mixed_rrho else "HF" if mixed_hf else
-                              self.family))
+                      family=(f"{electronic}+RRHO" if mixed_rrho else "HF" if mixed_hf
+                              else self.family))
 
     def __add__(self, other: Any) -> _Value:
         return self._binary(other, "add", _source())
@@ -1618,7 +1628,60 @@ class _SCI:
 sci = _SCI()
 
 
+CLASSICAL_METHODS = ("hf", "mp2", "ccsd", "ccsd_t")
+
+
+class _Classical:
+    """Classical ground-state methods on an active-space Hamiltonian (the screening ladder)."""
+
+    def solve(self, operator: _Value, sector: _Value, *, method: str = "ccsd_t") -> _Value:
+        if (not isinstance(operator, _Value) or operator.kind != "fermion_operator" or
+                not isinstance(sector, _Value) or sector.kind != "sector"):
+            raise CompileError([{"code": "QCL-E101", "source": _source(),
+                                 "message": "classical.solve requires a FermionOperator and "
+                                            "Sector",
+                                 "hint": "Use active.hamiltonian and active.sector"}])
+        if operator.graph is not sector.graph or operator.parent != sector.parent:
+            raise CompileError([{"code": "QCL-E103", "source": _source(),
+                                 "message": "Classical operator and sector refer to different "
+                                            "spaces",
+                                 "hint": "Use both projections from the same active space"}])
+        if method not in CLASSICAL_METHODS:
+            raise CompileError([{"code": "QCL-E104", "source": _source(),
+                                 "message": f"Unknown classical method {method!r}",
+                                 "hint": "Use one of " + ", ".join(CLASSICAL_METHODS)}])
+        graph = operator.graph
+        node = graph.add_node("classical.solve", [operator.node_id, sector.node_id],
+                              json.dumps({"method": method}), _source())
+        return _Value(graph, node, "classical_result", operator.molecule,
+                      family=method.upper().replace("_T", "(T)"))
+
+
+classical = _Classical()
+
+
 class _Lattice:
+    @staticmethod
+    def particles(operator: _Value, sector: Sector) -> _Value:
+        """The particle sector of a lattice operator, for the CI and classical solvers."""
+        if (not isinstance(operator, _Value) or operator.kind != "fermion_operator" or
+                operator.lattice is None or not isinstance(sector, Sector)):
+            raise CompileError([{"code": "QCL-E101", "source": _source(),
+                                 "message": "Lattice particles require a Hubbard operator "
+                                            "and Sector",
+                                 "hint": "Use qcl.models.hubbard and qcl.Sector"}])
+        n_alpha = (sector.n + 2 * sector.sz) / 2
+        n_beta = (sector.n - 2 * sector.sz) / 2
+        if (n_alpha != int(n_alpha) or n_beta != int(n_beta) or min(n_alpha, n_beta) < 0 or
+                max(n_alpha, n_beta) > operator.lattice.n_sites):
+            raise CompileError([{"code": "QCL-E105", "source": _source(),
+                                 "message": "Electron sector is infeasible for this lattice",
+                                 "hint": "Check electron count, spin and site count"}])
+        node = operator.graph.lattice_sector(operator.node_id, int(n_alpha), int(n_beta),
+                                             _source())
+        return _Value(operator.graph, node, "sector", parent=operator.parent,
+                      lattice=operator.lattice)
+
     @staticmethod
     def chain(size: int) -> Lattice:
         if type(size) is not int or size < 1:
@@ -2568,14 +2631,21 @@ vqe = _VQE()
 
 class _SQD:
     def diagonalize(self, operator: _Value, bitstrings: _Value, sector: _Value,
-                    *, seed: int = 7, recovery: bool = True, extend: bool = True) -> _Value:
+                    *, seed: int = 7, recovery: bool = True, extend: bool = True,
+                    n_batches: int = 10, max_iter: int = 5) -> _Value:
         """Diagonalize ``operator`` in the subspace spanned by sampled configurations.
 
         ``recovery`` repairs samples with the wrong particle numbers
         (configuration recovery) instead of discarding them; ``extend`` adds the
         single excitations of the leading configurations to the subspace.  Turn
-        both off to see what the samples alone contribute.
+        both off to see what the samples alone contribute. ``n_batches`` subsamples
+        and ``max_iter`` recovery rounds set the scale (screens use 2 and 2).
         """
+        if (type(n_batches) is not int or n_batches < 1 or type(max_iter) is not int or
+                max_iter < 1):
+            raise CompileError([{"code": "QCL-E101", "source": _source(),
+                                 "message": "SQD n_batches and max_iter must be positive",
+                                 "hint": "Pass positive integers"}])
         if (not isinstance(operator, _Value) or operator.kind != "fermion_operator" or
                 not isinstance(bitstrings, _Value) or bitstrings.kind != "bitstrings" or
                 not isinstance(sector, _Value) or sector.kind != "sector"):
@@ -2595,13 +2665,15 @@ class _SQD:
             raise CompileError([{"code": "QCL-E101", "source": _source(),
                                  "message": "SQD recovery and extend must be booleans",
                                  "hint": "Pass recovery=True/False and extend=True/False"}])
-        if recovery and extend:
+        if recovery and extend and (n_batches, max_iter) == (10, 5):
             node = operator.graph.sqd(operator.node_id, bitstrings.node_id, sector.node_id,
                                       seed, _source())
         else:
             node = operator.graph.add_node(
                 "sqd.diagonalize", [operator.node_id, bitstrings.node_id, sector.node_id],
-                json.dumps({"seed": seed, "recovery": recovery, "extend": extend}), _source())
+                json.dumps({"seed": seed, "recovery": recovery, "extend": extend,
+                            **({"n_batches": n_batches, "max_iter": max_iter}
+                               if (n_batches, max_iter) != (10, 5) else {})}), _source())
         return _Value(operator.graph, node, "estimate", operator.molecule, unit="hartree",
                       family="SQD")
 
@@ -3356,6 +3428,9 @@ class Plan:
                                                       if node["op"] == "ccsd.amplitudes" else
                                                       "sci.solve/chemflow-pyscf"
                                                       if node["op"] == "sci.solve" else
+                                                      "classical.solve/pyscf-" +
+                                                      node["params"]["method"]
+                                                      if node["op"] == "classical.solve" else
                                                       "gfn2.energy/chemflow-tblite"
                                                       if node["op"] == "gfn2.energy" else
                                                       "gfn2.optimize/chemflow-tblite"
@@ -3755,6 +3830,27 @@ class Plan:
 
     def _output_ids(self) -> list[int]:
         return sorted({value.node_id for value in _output_values(self._output)})
+
+    def relations(self) -> Any:
+        """The inferred target relation of each output, shaped like the output.
+
+        A relation states how a value relates to the exact answer of its question
+        (``equivalent``, ``variational_upper_bound``, ``stochastic_estimate``,
+        ``approximate`` or ``model_change``); ``None`` marks a value with no stated
+        question. Lists, tuples and dicts of values are reported element by element.
+        """
+        by_node = json.loads(relations_json(self._graph.graph_json()))
+
+        def shape(value: Any) -> Any:
+            if isinstance(value, _Value):
+                return by_node[value.node_id]
+            if isinstance(value, (list, tuple)):
+                return [shape(item) for item in value]
+            if isinstance(value, dict):
+                return {key: shape(item) for key, item in value.items()}
+            return None
+
+        return shape(self._output)
 
     def schedule(self, *, slots: dict[str, int] | None = None,
                  processes: bool | None = None,

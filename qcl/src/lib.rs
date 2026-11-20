@@ -8,7 +8,7 @@ fn solvent_params(
     eps: Option<f64>,
 ) -> PyResult<serde_json::Value> {
     match (model.as_deref(), name, eps) {
-        (Some("pcm"), Some(name), Some(eps)) => Ok(json!({"name": name, "eps": eps})),
+        (Some("pcm"), name, Some(eps)) => Ok(json!({"name": name, "eps": eps})),
         (Some("smd"), Some(name), None) => Ok(json!({"model": "smd", "name": name})),
         (None, None, None) => Ok(serde_json::Value::Null),
         _ => Err(pyo3::exceptions::PyValueError::new_err(
@@ -91,6 +91,20 @@ struct GraphBuilder {
 fn schedule_json(graph: &str, outputs: &str, costs: &str, slots: &str) -> PyResult<String> {
     qcl_sched::schedule_json(graph, outputs, costs, slots)
         .map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
+/// The target relation of every node of a graph (qcl-ir relation inference):
+/// a JSON list of relation names, `null` where a value states no question.
+#[pyfunction]
+fn relations_json(graph: &str) -> PyResult<String> {
+    let graph: Graph = serde_json::from_str(graph)
+        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+    let names: Vec<Option<&str>> = qcl_ir::relations::infer(&graph)
+        .into_iter()
+        .map(|relation| relation.map(|relation| relation.name()))
+        .collect();
+    serde_json::to_string(&names)
+        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))
 }
 
 #[pymethods]
@@ -1899,6 +1913,7 @@ impl GraphBuilder {
                 | ValueType::Mp2Result
                 | ValueType::FciResult
                 | ValueType::SciResult
+                | ValueType::ClassicalResult
                 | ValueType::GroundState
         ) {
             return Err(pyo3::exceptions::PyTypeError::new_err(
@@ -1908,6 +1923,7 @@ impl GraphBuilder {
         let op = match input.value_type {
             ValueType::FciResult => "fci.energy",
             ValueType::SciResult => "sci.energy",
+            ValueType::ClassicalResult => "classical.energy",
             ValueType::GroundState => "ed.energy",
             ValueType::Mp2Result => "mp2.energy",
             _ => "scf.energy",
@@ -2108,6 +2124,7 @@ fn _qcl(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(parse_cluster_json, module)?)?;
     module.add_function(wrap_pyfunction!(primitives_json, module)?)?;
     module.add_function(wrap_pyfunction!(schedule_json, module)?)?;
+    module.add_function(wrap_pyfunction!(relations_json, module)?)?;
     module.add_function(wrap_pyfunction!(ci_ground_energy, module)?)?;
     module.add_function(wrap_pyfunction!(ci_ground_state, module)?)?;
     module.add_function(wrap_pyfunction!(ci_sigma, module)?)?;

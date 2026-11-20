@@ -57,17 +57,65 @@ def validate_options(args) -> list[str]:
     return roles
 
 
+def engine(args) -> str:
+    """The execution engine for ``chemflow agent run``.
+
+    ``--engine auto`` (the default) follows ``CHEMFLOW_ENGINE`` when it is set; otherwise
+    the scripted policy runs QCL screens and live LLM policies keep the reviewed legacy
+    designer protocol until the QCL LLM roles are signed off. ``--engine qcl`` runs live
+    policies on the QCL roles (chemflow.agent.qcl_tools).
+    """
+    choice = getattr(args, "engine", "auto")
+    if choice == "auto":
+        choice = os.environ.get("CHEMFLOW_ENGINE") or (
+            "qcl" if getattr(args, "policy", "scripted") == "scripted" else "legacy")
+        if choice not in ("qcl", "legacy"):
+            raise ValueError("CHEMFLOW_ENGINE must be qcl or legacy")
+    return choice
+
+
 def run(args) -> None:
     try:
         if (getattr(args, "program", None) is not None or
-                getattr(args, "engine", "legacy") == "qcl" or
                 getattr(args, "screen", False) or
-                getattr(args, "candidate_program", None)):
+                getattr(args, "candidate_program", None) or
+                getattr(args, "builtin", False) or
+                engine(args) == "qcl" and getattr(args, "device", None) is not None):
             if args.policy != "scripted" or args.model is not None:
                 raise ValueError("QCL programs use the scripted policy")
             from chemflow.agent.qcl import run_cli
 
             run_cli(args)
+            return
+        if engine(args) == "qcl":
+            from chemflow.agent.qcl_run import run as run_screens
+
+            roles = validate_options(args)
+            try:
+                record = TaskRecord.model_validate_json(args.task.read_text(encoding="utf-8"))
+                TaskVerifier(args.public_key.read_bytes()).verify(record)
+            except (OSError, ValueError, TypeError) as exc:
+                raise AdapterError("CF-E120", None, "Invalid signed task or public key",
+                                   "Supply a signed task and its public key") from exc
+            import qcl
+
+            cluster = (qcl.Cluster.load(args.cluster) if getattr(args, "cluster", None)
+                       else qcl.Cluster.local())
+            if getattr(args, "dry_run", False):
+                from chemflow.agent.qcl_run import review_screen
+
+                review_screen(args, record, cluster)
+                return
+            policies = {}
+            if args.policy != "scripted":
+                from chemflow.agent.qcl_tools import QclToolRegistry
+
+                policies = {role: LLMPolicy(role, client_factory(args.policy, role, args.model),
+                                            QclToolRegistry(), record=record,
+                                            max_turns=getattr(args, "max_turns",
+                                                              DEFAULT_MAX_TURNS),
+                                            provider=args.policy) for role in roles}
+            run_screens(args, record, cluster, policies=policies, policy=args.policy)
             return
         if (getattr(args, "cluster", None) is not None or
                 getattr(args, "dry_run", False) or getattr(args, "device", None) is not None):

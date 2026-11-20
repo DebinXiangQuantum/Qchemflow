@@ -2,6 +2,7 @@
 
 from qcl._frontend import (
     ALPB,
+    CLASSICAL_METHODS,
     GBSA,
     PCM,
     PES,
@@ -43,6 +44,7 @@ from qcl._frontend import (
     ccsd,
     cholesky,
     ci_vector,
+    classical,
     compare,
     cond,
     contract,
@@ -102,6 +104,7 @@ from qcl._frontend import (
 
 __all__ = [
     "ALPB",
+    "CLASSICAL_METHODS",
     "GBSA",
     "PCM",
     "PES",
@@ -143,6 +146,7 @@ __all__ = [
     "ccsd",
     "cholesky",
     "ci_vector",
+    "classical",
     "compare",
     "cond",
     "contract",

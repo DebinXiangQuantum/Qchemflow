@@ -445,7 +445,7 @@ def test_qcl_agent_cli_builds_signed_ground_task_without_program(tmp_path, monke
     monkeypatch.setattr("sys.argv", ["chemflow", "agent", "run",
                                    "--task", str(task_path),
                                    "--public-key", str(key_path),
-                                   "--engine", "qcl", "--out", str(out)])
+                                   "--engine", "qcl", "--builtin", "--out", str(out)])
     main()
     summary = json.loads((out / "summary.json").read_text())
     review = json.loads((out / "qcl-review.json").read_text())

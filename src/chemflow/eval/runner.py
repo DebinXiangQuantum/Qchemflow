@@ -345,13 +345,13 @@ def write_report(results: dict, out: Path) -> None:
 
 def _run_task(task: EvaluationTask, directory: Path, public_path: Path,
               policy: str, model: str | None, roles: str,
-              max_turns: int = DEFAULT_MAX_TURNS) -> dict:
+              max_turns: int = DEFAULT_MAX_TURNS, engine: str = "auto") -> dict:
     error = None
     with (directory / "agent.log").open("w") as log, redirect_stdout(log), redirect_stderr(log):
         try:
             agent_cli.run(argparse.Namespace(task=directory / "task.json", public_key=public_path,
                           out=directory, policy=policy, model=model, roles=roles, rounds=2,
-                          max_turns=max_turns))
+                          max_turns=max_turns, engine=engine))
         except SystemExit as exc:
             if exc.code != 2:
                 raise
@@ -378,11 +378,12 @@ def _score_artifacts(task: EvaluationTask, directory: Path, error: str | None = 
     return row
 
 
-def _run_process(work: tuple, max_turns: int = DEFAULT_MAX_TURNS) -> dict:
+def _run_process(work: tuple, max_turns: int = DEFAULT_MAX_TURNS,
+                 engine: str = "auto") -> dict:
     task, directory, public_path, policy, model, roles = work
     payload = {"task": task.model_dump(mode="json"), "directory": str(directory),
                "public_path": str(public_path), "policy": policy, "model": model, "roles": roles,
-               "max_turns": max_turns}
+               "max_turns": max_turns, "engine": engine}
     result = subprocess.run([sys.executable, "-m", "chemflow.eval._worker"],
                             input=json.dumps(payload), capture_output=True, text=True, check=False)
     if result.returncode:
@@ -414,6 +415,8 @@ def run(args) -> dict:
         raise ValueError("--jobs must be a positive integer")
     agent_cli.validate_options(argparse.Namespace(**vars(args), rounds=2))
     max_turns = getattr(args, "max_turns", DEFAULT_MAX_TURNS)
+    engine = getattr(args, "engine", "auto")
+    choice = {"engine": engine} if engine != "auto" else {}
     out = args.out.resolve()
     if out.exists() and any(out.iterdir()):
         raise ValueError("Evaluation output directory must be empty (no artifact reuse)")
@@ -436,7 +439,7 @@ def run(args) -> dict:
         rows = []
         for item in work:
             row = (_not_run(item[0], quota) if quota is not None else
-                   _run_task(*item, max_turns=max_turns))
+                   _run_task(*item, max_turns=max_turns, **choice))
             rows.append(row)
             if row.get("quota") and quota is None:
                 quota = row
@@ -448,7 +451,7 @@ def run(args) -> dict:
             with quota_lock:
                 if quota is not None:
                     return _not_run(item[0], quota)
-            row = _run_process(item, max_turns=max_turns)
+            row = _run_process(item, max_turns=max_turns, **choice)
             if row.get("quota"):
                 with quota_lock:
                     if quota is None:
@@ -479,6 +482,8 @@ def run(args) -> dict:
                             "model": args.model or (agent_cli.DEFAULT_GLM_MODEL
                                                      if args.policy == "glm" else None),
                             "roles": args.roles, "git_commit": commit, "jobs": jobs,
+                            "engine": agent_cli.engine(argparse.Namespace(
+                                engine=engine, policy=args.policy)),
                             "max_turns": max_turns,
                             "elapsed_s": time.perf_counter() - started},
                "rows": rows, "aggregate": aggregate_rows(rows)}

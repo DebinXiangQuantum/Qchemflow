@@ -13,7 +13,8 @@ def main():
     row = _run_task(EvaluationTask.model_validate(payload["task"]),
                     Path(payload["directory"]), Path(payload["public_path"]),
                     payload["policy"], payload["model"], payload["roles"],
-                    max_turns=payload.get("max_turns", DEFAULT_MAX_TURNS))
+                    max_turns=payload.get("max_turns", DEFAULT_MAX_TURNS),
+                    engine=payload.get("engine", "auto"))
     json.dump(row, sys.stdout, allow_nan=False)
 
 

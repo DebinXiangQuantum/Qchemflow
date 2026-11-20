@@ -441,3 +441,35 @@ without configuration recovery (`qcl.sqd.diagonalize(..., recovery=False,
 extend=False)`), and computes CASCI. `docs/paper/` holds the report written from
 its runs on lqcloud MQ02, with `analysis.py` and `bench.py` that produce the
 figures and tables.
+
+## Signed tasks run as QCL screens
+
+`chemflow agent run` compiles a human-signed ChemFlow task into QCL and runs it; this is
+the default engine for every application in `chemflow app list`:
+
+```sh
+chemflow app draft ground_state_energy --example --out drafts
+chemflow task freeze --from drafts/ground_state_energy-01.json --approver you --out task.json
+chemflow agent run --task task.json --public-key keys/public.pem --out run
+```
+
+One screening round is one QCL plan with named outputs: the classical ladder
+(`qcl.classical.solve`, methods `hf`, `mp2`, `ccsd`, `ccsd_t`), the candidates
+(`candidate0`… — `qcl.sci.solve` cutoffs and LUCJ-sampled `qcl.sqd.diagonalize`) and the
+exact reference (`fci`, or `ed` for lattices). Compiling them together shares the SCF and
+integrals and lets the scheduler overlap the solvers. Each output is graded against the
+reference with the signed gates; `relation_at_least` uses `plan.relations()`, the
+relation the compiler infers from `primitives.toml`:
+
+```python
+plan = workflow.compile(...)
+plan.relations()   # {"hf": "variational_upper_bound", "ccsd": "approximate", "fci": "equivalent", ...}
+```
+
+The run directory holds `summary.json`, `report.md`, `journal.jsonl`, `results.sqlite`,
+`qcl-screen.json` (plans, predicted makespans), `qcl-profile.json` and one relation
+certificate per graded output under `certificates/`. `--dry-run` compiles the first round
+and writes `qcl-review.json`; `--builtin` runs the task's single built-in program
+instead; `--policy openai|anthropic|glm` drives the modeler, designer, critic and analyst
+roles through typed QCL tools (`chemflow.agent.qcl_tools`). External agents use the same
+tools through the MCP server's `qcl` profile.

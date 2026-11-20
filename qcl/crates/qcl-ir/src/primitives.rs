@@ -31,6 +31,15 @@ pub struct Primitive {
     pub message: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hint: Option<String>,
+    /// How the op's value relates to the exact answer of its question: a fixed relation
+    /// or a rule over its inputs (see `relations.rs`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relation: Option<String>,
+    /// For `relation = "param"`: the parameter whose value selects from `relations`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relation_param: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub relations: BTreeMap<String, String>,
 }
 
 fn is_zero(value: &usize) -> bool {
@@ -83,6 +92,28 @@ pub fn parse(source: &str) -> Result<BTreeMap<String, Primitive>, String> {
             return Err(format!(
                 "{op}: output_from applies only to output = \"input\""
             ));
+        }
+        if let Some(entry) = &primitive.relation {
+            if !crate::relations::valid_entry(entry) {
+                return Err(format!("{op}: unknown relation {entry:?}"));
+            }
+            let by_param = entry == "param";
+            if by_param != primitive.relation_param.is_some()
+                || by_param == primitive.relations.is_empty()
+            {
+                return Err(format!(
+                    "{op}: relation = \"param\" needs relation_param and relations"
+                ));
+            }
+        } else if primitive.relation_param.is_some() || !primitive.relations.is_empty() {
+            return Err(format!("{op}: relation_param and relations need relation = \"param\""));
+        }
+        if let Some(name) = primitive
+            .relations
+            .values()
+            .find(|name| !crate::relations::RELATIONS.contains(&name.as_str()))
+        {
+            return Err(format!("{op}: unknown relation {name:?}"));
         }
         if let Some(kind) = primitive
             .devices

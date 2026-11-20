@@ -9,12 +9,24 @@ class Diagnostic(BaseModel, frozen=True):
     fix_hints: list[str] = []
 
 
+def _restore(cls: type, args: tuple, state: dict) -> Exception:
+    error = Exception.__new__(cls)
+    error.args = args
+    error.__dict__.update(state)
+    return error
+
+
 class CheckError(Exception):
     def __init__(self, diagnostics: list[Diagnostic]):
         if not diagnostics:
             raise ValueError("CheckError requires at least one diagnostic")
         self.diagnostics = diagnostics
         super().__init__("; ".join(f"{d.code}: {d.message}" for d in diagnostics))
+
+    def __reduce__(self):
+        # Subclasses take other constructor arguments; rebuild from the instance state so
+        # errors cross process boundaries (QCL lane processes) intact.
+        return _restore, (type(self), self.args, dict(self.__dict__))
 
 
 class AdapterError(CheckError):

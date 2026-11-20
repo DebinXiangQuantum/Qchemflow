@@ -405,7 +405,7 @@ def _op_sci_solve(ctx, node, identifier, operation, inputs):
     device = node["device"]
     if device["kind"] != "cpu":
         raise ValueError(f"Unsupported SCI device: {device['kind']}")
-    if inputs[0]["data"] is not inputs[1]["data"]:
+    if inputs[1].get("data", inputs[0]["data"]) is not inputs[0]["data"]:
         raise ValueError("SCI operator and sector refer to different active spaces")
     data = inputs[0]["data"]
     sector = inputs[1].get("sector", data.sector)
@@ -423,9 +423,11 @@ def _op_sci_solve(ctx, node, identifier, operation, inputs):
     ci_vectors[identifier] = vector
     values[identifier] = {
         **inputs[0], "energy": energy, "device": device["id"],
-        "method": {"family": "SCI", "basis": data.model.basis,
-                   "active_electrons": data.active.n_elec,
-                   "active_orbitals": data.active.n_orb,
+        "method": {"family": "SCI",
+                   **({"basis": data.model.basis, "active_electrons": data.active.n_elec,
+                       "active_orbitals": data.active.n_orb}
+                      if getattr(data, "model", None) is not None else
+                      {"sites": sector.n_orb}),
                    "sector": {"n_alpha": sector.n_alpha,
                               "n_beta": sector.n_beta},
                    "select_cutoff": settings["select_cutoff"],
@@ -435,4 +437,48 @@ def _op_sci_solve(ctx, node, identifier, operation, inputs):
         "implementation": "sci.solve/chemflow-pyscf",
         "versions": {"pyscf": pyscf.__version__},
         "validity_flags": ["Variational upper bound within the signed Hamiltonian"],
+    }
+
+
+@implements("classical.solve")
+def _op_classical_solve(ctx, node, identifier, operation, inputs):
+    """HF, MP2, CCSD or CCSD(T) on the active-space Hamiltonian (frozen-core embedding)."""
+    import pyscf
+
+    from chemflow.impls.pyscf_impls import classical_energy
+
+    values = ctx.values
+    store = ctx.store
+    from dataclasses import replace
+
+    device = node["device"]
+    if device["kind"] != "cpu":
+        raise ValueError(f"Unsupported classical.solve device: {device['kind']}")
+    if inputs[1].get("data", inputs[0]["data"]) is not inputs[0]["data"]:
+        raise ValueError("Classical operator and sector refer to different active spaces")
+    data = inputs[0]["data"]
+    sector = inputs[1].get("sector", data.sector)
+    if sector != data.sector:
+        data = replace(data, sector=sector)
+    if hasattr(data, "mean_field"):
+        data.mean_field(store)
+    method = node["params"]["method"]
+    diagnostics = {}
+    energy = classical_energy(data, method, store, diagnostics)
+    family = {"hf": "HF", "mp2": "MP2", "ccsd": "CCSD", "ccsd_t": "CCSD(T)"}[method]
+    values[identifier] = {
+        **inputs[0], "energy": energy, "device": device["id"],
+        "method": {"family": family,
+                   **({"basis": data.model.basis, "active_electrons": data.active.n_elec,
+                       "active_orbitals": data.active.n_orb}
+                      if getattr(data, "model", None) is not None else
+                      {"sites": sector.n_orb}),
+                   "sector": {"n_alpha": sector.n_alpha, "n_beta": sector.n_beta},
+                   **{key: diagnostics[key] for key in ("s2", "reference", "note")
+                      if key in diagnostics}},
+        "implementation": f"classical.solve/pyscf-{method}",
+        "versions": {"pyscf": pyscf.__version__},
+        "validity_flags": (["Variational upper bound within the signed Hamiltonian"]
+                           if method == "hf" else
+                           ["Size-consistent approximation; not a variational bound"]),
     }

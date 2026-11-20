@@ -44,6 +44,22 @@ class ResultsDB:
         self.connection.commit()
         return identifier
 
+    def add_headline(self, *, record_hash: str, plan_hash: str, node_id: str, operator: str,
+                     relation: str, value: float, unit: str, headline: dict) -> str:
+        """Store one QCL screen output with its report headline; returns its result id."""
+        data = (record_hash, record_hash, plan_hash, node_id, operator,
+                canonical_json({"node": node_id}), relation, value, unit,
+                canonical_json({}), canonical_json([{"status": "qcl_screen"}]),
+                canonical_json({}), canonical_json({"engine": "qcl", "plan_hash": plan_hash}))
+        identifier = content_hash((data, headline))
+        self.connection.execute("INSERT OR IGNORE INTO results VALUES "
+                                "(?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (identifier, *data))
+        self.connection.execute("INSERT OR IGNORE INTO report_records VALUES (?,?,NULL)",
+                                (identifier, canonical_json({**headline,
+                                                             "result_id": identifier})))
+        self.connection.commit()
+        return identifier
+
     def qcl_run(self, identifier: str) -> dict | None:
         row = self.connection.execute("SELECT * FROM qcl_runs WHERE id=?",
                                       (identifier,)).fetchone()

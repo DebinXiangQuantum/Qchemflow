@@ -19,6 +19,8 @@ from chemflow.runtime import Executor
 from chemflow.signing import TaskVerifier
 
 PROFILES = ("planner", "modeler", "designer", "critic", "analyst", "full")
+# The QCL engine's tools: read the signed task, compile and run its screens.
+QCL_PROFILE = "qcl"
 
 
 def _install_strict_schema(server, name: str, schema: dict) -> None:
@@ -48,7 +50,7 @@ def create_server(profile: str, task: str, *, public_key: str,
                          key_fingerprint=key_fingerprint, qpu=qpu, gpu=gpu, packs=packs)
     journal = journal or str(Path(task).with_suffix(".journal"))
     server = MCPServer("chemflow")
-    role = "orchestrator" if profile == "full" else profile
+    role = "orchestrator" if profile in ("full", QCL_PROFILE) else profile
     schemas = tools.schemas(role)
     owners = {item["name"]: role for item in schemas}
     if profile == "full":
@@ -96,12 +98,19 @@ def create_server(profile: str, task: str, *, public_key: str,
 def create_tools(profile: str, task: str, *, public_key: str,
                  key_fingerprint: str | None = None, qpu: str | None = None,
                  gpu: bool = False, packs: str = "molecular"):
-    if profile not in PROFILES:
+    if profile not in (*PROFILES, QCL_PROFILE):
         raise ValueError("Unknown role profile")
     verifier = TaskVerifier(Path(public_key).read_bytes())
     if key_fingerprint is not None and key_fingerprint != verifier.fingerprint:
         raise ValueError("CF-E120: Public key fingerprint mismatch")
     record, store = load_task(task, verifier)
+    if profile == QCL_PROFILE:
+        import qcl
+        from chemflow.agent.qcl_tools import make_session_tools
+
+        directory = Path(task).resolve().parent / ".chemflow-qcl"
+        directory.mkdir(exist_ok=True)
+        return make_session_tools(record, qcl.Cluster.local(), directory)
     registry = load_registry([name.strip() for name in packs.split(",")])
     if gpu:
         from chemflow.backends.gpu import register_gpu
@@ -119,7 +128,7 @@ def create_tools(profile: str, task: str, *, public_key: str,
 def main() -> None:
     parser = argparse.ArgumentParser(description="Task-bound ChemFlow MCP tool server",
                                      allow_abbrev=False)
-    parser.add_argument("--profile", choices=PROFILES, required=True)
+    parser.add_argument("--profile", choices=(*PROFILES, QCL_PROFILE), required=True)
     parser.add_argument("--task", required=True)
     parser.add_argument("--public-key", required=True)
     parser.add_argument("--key-fingerprint")

@@ -208,7 +208,8 @@ class LLMPolicy:
                                    for card in value] if key == "cards" else
                                    _summary(value) if key == "diagnostics" else value)
                             for key, value in observation.items()}}
-        prompt = {"designer": DESIGNER_PROMPT, "modeler": MODELER_PROMPT}.get(self.role, (
+        prompt = (getattr(self, "prompts", None) or {}).get(self.role) or {
+            "designer": DESIGNER_PROMPT, "modeler": MODELER_PROMPT}.get(self.role, (
             f"You are ChemFlow's {self.role}. {CONTRACTS[self.role]}\n"
             "Use the available tools for plan changes. Only screen runs are allowed. "
             "Return a plan through a tool result; never assert your own evidence or gates."))

@@ -234,6 +234,30 @@ Provenance is serializable and attached to every value returned by `plan.run()`.
 - Subtracting or comparing two quantities of the same kind (for example two electronic energies) checks model compatibility: method family, basis, geometry mode and active-space policy. A mismatch is error `QCL-E103`. Different active-space *sizes* under the same policy (for example fragments under `max_orbitals`) are allowed. Solvation model is not part of the compatibility key, because solvation energies are defined as differences across solvent models.
 - Adding a correction of a different kind (for example an RRHO thermal correction to an electronic energy) is allowed and recorded in provenance.
 
+### 4.5a Target relations (implemented)
+
+Every estimate also has a *target relation*: how it relates to the exact answer of the
+question it states. The relations are those of ChemFlow's signed gates:
+`equivalent`, `variational_upper_bound`, `stochastic_estimate`, `approximate` and
+`model_change`. They are not claimed by results; the compiler infers them.
+
+- Each estimate-producing primitive declares a relation in `primitives.toml`
+  (`relation = "..."`): fixed (`fci.solve` is `equivalent`, `scf.rhf` and
+  `sci.solve` are `variational_upper_bound`, `vqe.sampled` is `stochastic_estimate`,
+  `dft.rks` is `model_change`), selected by a parameter (`classical.solve`:
+  `method = hf` is an upper bound, `mp2`/`ccsd`/`ccsd_t` are `approximate`), or a
+  rule over its inputs: `input`, `sum`, `difference`, `scale`, `decreasing`, `meet`.
+- Electronic energies are related to the exact eigenvalue of their model Hamiltonian.
+  Model-defined properties (ESOL, MM/GBSA, GFN2, the Lehmann spectral function) are
+  `equivalent` to the model they implement.
+- Composition (`qcl-ir/src/relations.rs`) matches `chemflow.relations`: a sum of upper
+  bounds is an upper bound; `upper - exact` is an upper bound, but `exact - upper` and
+  `upper - upper` are only `approximate`; a negative scale turns an upper bound into an
+  unrepresented lower bound (`approximate`); `model_change` absorbs everything.
+- `plan.relations()` returns the relation of each output, shaped like the output. A
+  signed `relation_at_least` gate is therefore checked against the compiled program,
+  before or after it runs.
+
 ### 4.6 Seeds and determinism
 
 - Every stochastic operation (conformer embedding, sampling, subsampling, configuration recovery, MD) takes `seed=`. If it is omitted, a seed is derived deterministically from the workflow seed and the operation's position in the graph, and recorded.
@@ -273,12 +297,15 @@ Every entry below is a compute operation unless marked *host* or *driver*.
 - `qcl.scf.hf(mol)` (RHF or ROHF, chosen from `mol.spin`), `qcl.scf.rhf`, `qcl.scf.rohf`, `qcl.scf.uhf`, `qcl.dft.rks(mol, xc=)`, `qcl.dft.uks`.
   - Optional data inputs: `eri=` (precomputed integrals), `guess=` (orbitals from an earlier result), `solvent=` (`qcl.PCM(name)` or `qcl.SMD(name)`).
 - `qcl.ccsd.amplitudes(act)`, `qcl.mp2(mf)`.
+- `qcl.classical.solve(H, sector, method=)` with `method` in `hf`, `mp2`, `ccsd`,
+  `ccsd_t`: the classical screening ladder on an active-space (frozen-core embedded) or
+  lattice Hamiltonian. `.energy` is an estimate whose relation depends on the method.
 - Grids and exchange-correlation: `qcl.grids(mol, level)`, `qcl.xc(grid, density, functional)`.
 
 ### 5.5 Many-body / CI space
 
 - `qcl.active_space(mf, active)` returns an `ActiveSpace` with `.hamiltonian` (a `FermionOperator`) and `.sector`. Requesting more orbitals than the species has is error `QCL-E105`.
-- Solvers: `qcl.fci.solve(H, sector)`, `qcl.sci.solve(H, sector, ...)`, `qcl.ed.ground_state(H, sector)` for lattice models.
+- Solvers: `qcl.fci.solve(H, sector)`, `qcl.sci.solve(H, sector, ...)`, `qcl.ed.ground_state(H, sector)` for lattice models. `qcl.lattice.particles(H, sector)` gives a lattice operator's particle sector to the CI and classical solvers.
 - Building blocks: `qcl.sigma(H, c)` (the H·c product), `qcl.davidson`, `qcl.lanczos`, `qcl.rdm1`, `qcl.rdm2`, `qcl.expect(state, op)`.
 - `qcl.sqd.diagonalize(H, bits, sector)`: configuration recovery, subsampling and projected diagonalization.
 
@@ -541,6 +568,71 @@ error[QCL-E201]: value is never placed
 Agents write QCL programs directly, with the same freedom as humans at every level: algorithm, kernels and deployment. No separate tool protocol is needed. Compile diagnostics, `plan.explain()`, `plan.estimate()`, `plan.validate()` and `plan.profile()` form the agent's feedback loop, and `format="json"` gives machine-readable output.
 
 The recommended loop: write → compile and fix diagnostics → estimate → validate on a reduced instance → run → compare → keep the Pareto front of cost against error.
+
+### 8.1a Signed tasks as screens (implemented)
+
+`chemflow agent run` executes a human-signed ChemFlow task by compiling it to QCL
+(`chemflow.agent.screen`, driver `chemflow.agent.qcl_run`). This is the default engine
+for the scripted policy. Live LLM policies run on QCL with `--engine qcl` (or
+`CHEMFLOW_ENGINE=qcl`); by default they keep the reviewed legacy designer protocol until
+the QCL roles below are signed off. `--engine legacy` selects the previous orchestrator
+(deprecated). `--builtin` (or `--device`) runs the task's single built-in QCL program
+instead of a screen, and `--program`/`--screen` run agent-authored QCL programs under the
+question checks of §8.1.
+
+- **One plan per round.** A screen is one workflow whose named outputs are the classical
+  controls, the candidates and the exact in-model reference: for a ground energy,
+  `hf`, `mp2`, `ccsd`, `ccsd_t` (`qcl.classical.solve`), `sci-0.01`, `sci-0.001`,
+  `sqd-1024`, `sqd-2048` and `fci`. Composite targets (reaction, interaction, ranking,
+  bond-dissociation, scan, barrier, IP/EA) apply each method to every species and
+  combine the energies with QCL estimate arithmetic. Compiling all methods together
+  lets common-subexpression elimination share the SCF and integrals and lets the
+  scheduler overlap independent solvers (`overlap=True` once the predicted sequential
+  time is at least 2 s; below that, lanes cost more than they save).
+- **Grading.** Each output is graded against the reference output with the signed
+  gates: absolute error (maximum over the points of a curve or ranking), the L1 error
+  of a spectral function against the independent Fock-space reference, and
+  `relation_at_least` against `plan.relations()`. Model-defined targets (solubility,
+  binding, metabolic sites, solvation, frontier orbitals, spectral functions, periodic
+  energies) are `equivalent` to the trusted plan that computes their signed model.
+- **Decision.** The deterministic critic decides: `stop` with the lowest-error passing
+  classical control (or the reference when none passes), `escalate` when a candidate
+  passes and no affordable classical control does, `revise` to run the next candidate
+  round (`sci-0.0001`, `sqd-4096`, `sqd-8192`; at most two rounds, reusing round 0's
+  reference).
+- **Refusals before work.** No `pure` effect (`CF-E120`), an exhausted wall or CPU
+  budget, or a candidate batch above the signed `sim_shots` (`CF-E070`) are refused
+  before anything runs; the summary records `nothing_consumed`.
+- **Signed QPU policy.** QCL samples only under an operator policy (§8.2). For a signed
+  task the signature is the operator's decision, so the driver writes the policy from
+  the task's shot budget and allows only local simulators; built-in screens never place
+  work on a real QPU.
+- **Failure isolation.** If the joint plan fails (for example one CCSD does not
+  converge), each method is rerun as its own plan and the failures are reported as
+  failed outputs; the others still answer.
+- **Relation certificates.** Each graded output's relation comes with a certificate
+  (`certificates/<id>.json`): every node it depends on, with its op and the relation the
+  primitive table assigns, so the inference can be checked by hand.
+- **Validity maps.** For a signed validity domain, each method is graded against the
+  reference at sampled points of every axis (geometry scale, Hubbard U, internal
+  coordinate, separation, pH). All points of a sampling level compile into one plan;
+  intervals whose end points disagree are bisected to the signed resolution. The critic
+  escalates only candidates valid at the task point.
+- **Deployability.** A sampled candidate is deployable when a catalogued QPU fits its
+  qubits and shots (`lqcloud_mq02`: 24 qubits, up to 50 000 shots).
+- **LLM roles.** Live policies use typed QCL tools (`chemflow.agent.qcl_tools`): the
+  modeler chooses an automatic active space (`model.choose`, checked for feasibility);
+  the designer reads the graded controls and reference of round 0, compiles proposals with
+  `screen.review` and submits typed candidates (`sci {select_cutoff}`, `sqd {shots}`)
+  with `design.submit`, which the trusted builder turns into one more screen; the critic
+  argues while the verdict stays deterministic; the analyst writes a report whose quoted
+  energies must match recorded results. No agent output is executed as code.
+- **MCP.** The `qcl` profile of the ChemFlow MCP server (`chemflow tool call --profile
+  qcl`, plugin agent `plugin/agents/qcl.md`) gives external agents `task.get`,
+  `methods.list`, `screen.review` and `screen.run`; runs share one budget ledger per task.
+
+On the three evaluation suites (79 tasks) the QCL engine gives the same answers and
+decisions as the legacy orchestrator: 79/79 correct.
 
 ### 8.2 Budgets (operator-controlled)
 
@@ -1175,6 +1267,8 @@ qcl/
 | D19 | Dynamic pattern collections remain symbolic; lane identity cannot change the scientific question | Work assignment may vary without changing results |
 | D20 | Primitives are declared once in `primitives.toml`; the checker's coarse device availability, the graph builder's node types and the worker registry all derive from or are tested against it | Device availability was hand-copied across the frontend, checker and an 80-branch worker `if` chain; adding an operation touched five places that could silently disagree |
 | D21 | The compiler chooses *when* and *how many at once*, never *where*; lanes that do real work run in their own processes | Placement stays the program's decision (D3). Thread lanes in one process were no faster than sequential execution because the scientific libraries do much of their work in Python |
+| D22 | Target relations are inferred by the compiler from the primitive table, not asserted by results | A relation gate is part of the signed task's contract; deriving it from the program makes it checkable before execution and impossible for a result to overstate |
+| D23 | Signed tasks run as QCL screens by default; live LLM policies opt in with `--engine qcl` until the QCL roles are reviewed, and the legacy orchestrator remains for them meanwhile | One engine for every application, and the screen's controls, candidates and reference share work and overlap in one plan |
 
 ---
 
