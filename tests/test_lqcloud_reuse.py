@@ -59,7 +59,11 @@ def prep(angles, state="state-a"):
 
 @pytest.fixture
 def backend(tmp_path, monkeypatch):
+    from chemflow.backends import lqcloud
+
     monkeypatch.setenv("LQCLOUD_API_KEY", "test-key")
+    # Job reuse is under test, not program conversion (which needs the lqcloud SDK).
+    monkeypatch.setattr(lqcloud, "to_lqcloud", lambda circuit: "program")
     cloud = Cloud()
     qpu = LqcloudBackend(state_dir=tmp_path / "qpu", provider_factory=cloud.provider_factory,
                          job_factory=cloud.job_factory)
