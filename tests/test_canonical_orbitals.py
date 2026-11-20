@@ -66,3 +66,18 @@ def test_active_space_integrals_do_not_depend_on_the_solver_choice(nitrogen):
         integrals.append(store.get(data.hamiltonian.h1_ref))
         assert np.allclose(mf.mo_coeff, store.get(data.space.coefficients_ref))
     assert np.allclose(integrals[0], integrals[1], atol=1e-8)
+
+
+def test_rhf_leaves_a_symmetric_saddle_point():
+    """Square H4: the D4h-symmetric RHF solution is a saddle point; SCF reached it or
+    the stable solution depending on floating-point noise (OpenMP reduction order)."""
+    from chemflow.impls.pyscf_impls import build_molecule, stable_rhf
+
+    atoms = "H 0 0 0; H 0 0 1.55; H 1.55 0 1.55; H 1.55 0 0"
+    symmetric = scf.RHF(gto.M(atom=atoms, basis="sto-3g", symmetry=True, verbose=0)).run()
+    mean_field = scf.RHF(gto.M(atom=atoms, basis="sto-3g", verbose=0))
+    mean_field.kernel(symmetric.make_rdm1())
+    assert mean_field.converged and mean_field.e_tot == pytest.approx(-1.6098998, abs=1e-6)
+    assert stable_rhf(mean_field).e_tot == pytest.approx(-1.6976295, abs=1e-6)
+    data = build_molecule(atoms, ElectronicModel(basis="sto-3g"), ArtifactStore())
+    assert data.mf.e_tot == pytest.approx(-1.6976295, abs=1e-6)

@@ -54,7 +54,31 @@ def build_molecule(atoms: str, model: ElectronicModel, store: ArtifactStore,
                 "Bohr" if unit == "bohr" else unit, charge=charge, spin=spin, verbose=0)
     mf = scf.ROHF(mol) if spin or model.reference == "ROHF" else scf.RHF(mol)
     mf.kernel()
+    if not isinstance(mf, scf.rohf.ROHF):
+        mf = stable_rhf(mf)
     return _from_scf(mf, model, store, active, atoms, unit, charge, spin)
+
+
+def stable_rhf(mf: scf.hf.RHF, rounds: int = 3) -> scf.hf.RHF:
+    """Follow internal (RHF -> RHF) instabilities to a stable RHF solution.
+
+    From a symmetric start (square H4, for example) SCF can stop at a saddle point,
+    and which stationary point it reaches then depends on floating-point noise
+    such as OpenMP reduction order. Every correlated method built on the orbitals
+    inherits that choice, so a converged but unstable solution is pushed downhill.
+    """
+    occupied = int((mf.mo_occ > 0).sum())
+    if occupied == 0 or occupied == len(mf.mo_occ):
+        return mf  # no occupied-virtual rotation exists
+    for _ in range(rounds):
+        if not mf.converged:
+            break
+        rotated, _, stable, _ = mf.stability(internal=True, external=False,
+                                             return_status=True)
+        if stable:
+            break
+        mf.kernel(mf.make_rdm1(rotated, mf.mo_occ))
+    return mf
 
 
 # Probe points (unit-free offsets, scaled by the molecule's extent) and weights for the

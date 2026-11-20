@@ -691,9 +691,11 @@ An unrelaxed 1.6\,\AA{} H--H contact between added hydrogens at the interface. &
 Relax hydrogens within 8\,\AA{} of the ligand (others fixed) before the single point;
 record the evaluated structure. \\
 An ADAPT-VQE test passed alone and failed in the full suite (110\,mEh). &
-Symmetry-equivalent operators of square H$_4$ have gradients equal up to rounding;
-the choice among them followed the BLAS threading state, and one choice traps ADAPT. &
-Compare gradient magnitudes at $10^{-9}$ and break ties by operator index. \\
+RHF of square H$_4$ starts from a symmetric guess and stopped either at the stable
+solution or at a D$_{4h}$ saddle point 88\,mEh higher, depending on OpenMP reduction
+order; ADAPT from the saddle stalls. &
+Follow internal (RHF$\to$RHF) instabilities to a stable solution after every RHF;
+ADAPT also breaks gradient ties by operator index. \\
 HCN/HNC transition-state search no longer converged. &
 tblite~0.8 changed GFN2-xTB results the NEB settings were validated on. &
 Constrain \code{tblite<0.8}. \\
