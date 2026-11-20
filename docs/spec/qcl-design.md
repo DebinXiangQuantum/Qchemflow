@@ -528,6 +528,7 @@ error[QCL-E201]: value is never placed
 | `QCL-E504` | Convergence failure |
 | `QCL-W101` | Validity note (for example "orbital gap is not the fundamental gap") |
 | `QCL-W201` | Large implicit transfer |
+| `QCL-W202` | A host value holds device data and pins its consumers to a GPU process |
 | `QCL-W301` | Queued QPU inside a driver loop |
 | `QCL-W302` | Non-deterministic implementation selected |
 
@@ -986,9 +987,43 @@ primitives in one table and registers implementations in the Python worker:
 Adding an operation therefore takes three edits: a table entry, a frontend
 function, and an `@implements` handler.
 
-Known gap: a plan still runs in one worker subprocess that executes nodes in
-topological order, so operations on different devices do not yet overlap.
-The asynchronous executor of §10.3 and §10.4 remains to be built.
+### 10.9 Scheduling and the lane runtime (implemented)
+
+`plan.run()` executes nodes one at a time in program order. `plan.run(overlap=True)`
+executes the compiled schedule that `plan.schedule()` returns:
+
+- **`qcl-sched` (Rust).** Dead-node elimination (only nodes an output or a
+  `qcl.require` reaches; an unused QPU job is never submitted); common-subexpression
+  elimination (equal nodes after their inputs' duplicates are resolved become
+  aliases; QPU jobs are never merged); upward-rank priorities (predicted cost plus
+  the most expensive path after the node, as in HEFT); per-lane slots; and a
+  list-scheduling simulation that reports the predicted makespan, critical path and
+  speed-up. Placement is never changed.
+- **Cost model (`qcl._costmodel`).** A node's signature is its operation, device
+  kind, remoteness and problem sizes. Measured durations of every run update a
+  profile cache (`$QCL_PROFILE_CACHE`, `off` to disable) as a moving average;
+  unmeasured signatures use size-based estimates. Costs order work only.
+- **Slots.** CPU lanes run as many independent nodes as their dependency width
+  allows, bounded by threads/8, with min(32, threads/slots) OpenMP threads per
+  node (PySCF's selected CI crashes with several hundred threads). Cloud QPUs and
+  local simulators run up to four jobs at once; GPUs one node.
+  `device.with_options(slots=n)` overrides the default.
+- **Lane runtime (`qcl._runtime`).** Lanes that do real work run in their own
+  processes, because Python-level work in threads of one process contends for one
+  interpreter lock: one persistent process per GPU lane (values stay resident on
+  the GPU), process pools for CPU and simulator lanes, and coordinator threads for
+  cloud-QPU waits and host operations. Values move by cloudpickle only when a node
+  in another process needs them; arrays use a content-addressed store in shared
+  memory. Nodes that read GPU-resident values run in that GPU's process. The
+  transport preserves object identity (handlers check that an operator and a sector
+  come from the same active space). Host copies drop private device caches; a host
+  value that still cannot leave a GPU process is flagged in the profile as QCL-W202.
+  `QCL_TRACE=<file>` logs every dispatch and completion, and SIGUSR1 then dumps the
+  Python stacks of the coordinator and every lane process.
+- **Schedule invariance.** Sequential, threaded and process execution agree to
+  1e-10 Eh in the tests; orbital canonicalization (degenerate blocks rotated to
+  diagonalize a fixed probe operator, signs fixed) makes upstream results
+  reproducible enough for this.
 
 ---
 
@@ -1139,6 +1174,7 @@ qcl/
 | D18 | Local examples must support a CPU-only host | `Cluster.local()` does not guarantee a GPU |
 | D19 | Dynamic pattern collections remain symbolic; lane identity cannot change the scientific question | Work assignment may vary without changing results |
 | D20 | Primitives are declared once in `primitives.toml`; the checker's coarse device availability, the graph builder's node types and the worker registry all derive from or are tested against it | Device availability was hand-copied across the frontend, checker and an 80-branch worker `if` chain; adding an operation touched five places that could silently disagree |
+| D21 | The compiler chooses *when* and *how many at once*, never *where*; lanes that do real work run in their own processes | Placement stays the program's decision (D3). Thread lanes in one process were no faster than sequential execution because the scientific libraries do much of their work in Python |
 
 ---
 

@@ -492,8 +492,11 @@ def _op_sqd_diagonalize(ctx, node, identifier, operation, inputs):
                       encoding_id=bits["encoding_id"], basis=bits["basis"],
                       source=bits["source"], seed=bits["seed"],
                       device=bits["device"], job_ids=bits["job_ids"])
+    recovery = node["params"].get("recovery", True)
+    extend = node["params"].get("extend", True)
     energy, diagnostics = sqd_sector(data, data.sector, store, samples,
-                                     seed=node["params"]["seed"])
+                                     seed=node["params"]["seed"], recovery=recovery,
+                                     with_ext=extend)
     batches = diagnostics["batch_energies"]
     variance = (float(np.var(batches, ddof=1) / len(batches))
                 if len(batches) > 1 else 0.0)
@@ -511,6 +514,9 @@ def _op_sqd_diagonalize(ctx, node, identifier, operation, inputs):
             "sample_parts": bits["parts"],
             "seed": node["params"]["seed"],
             "subspace_dimension": diagnostics["subspace_dimension"],
+            "sector_dimension": diagnostics["sector_dimension"],
+            "valid_fraction": diagnostics["valid_fraction"],
+            "recovery": recovery, "extend": extend,
             "batch_spread": diagnostics["batch_spread"],
             "validity_flags": ["SQD subspace bias is not bounded by batch variance"],
             **({"sample_billing": bits["provenance"]["billing"]}

@@ -4,7 +4,25 @@ import math
 import re
 from typing import Any
 
-_MISSING = object()
+
+class _MissingType:
+    """The value of a node whose guard is false or whose input is missing.
+
+    A singleton that pickles by reference, so it stays itself across lane processes.
+    """
+
+    __slots__ = ()
+
+    def __reduce__(self) -> str:
+        return "_MISSING"
+
+    def __repr__(self) -> str:
+        return "<missing>"
+
+
+_MISSING = _MissingType()
+
+
 def _native_ci_order(norb: int, electrons: int) -> Any:
     from itertools import combinations
 

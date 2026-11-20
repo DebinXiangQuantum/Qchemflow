@@ -41,6 +41,20 @@ def recover_configurations(batch, sector, occupancy, rng):
     return {int(row @ (1 << np.arange(2 * sector.n_orb))) for row in restored}
 
 
+def _valid_masks(batch, sector):
+    half = (1 << sector.n_orb) - 1
+    return {int(mask) for mask in batch
+            if (int(mask) & half).bit_count() == sector.n_alpha
+            and (int(mask) >> sector.n_orb).bit_count() == sector.n_beta}
+
+
+def _valid_masks_all(values, sector):
+    half = (1 << sector.n_orb) - 1
+    return [mask for mask in values.tolist()
+            if (mask & half).bit_count() == sector.n_alpha
+            and (mask >> sector.n_orb).bit_count() == sector.n_beta]
+
+
 def product_strings(masks, sector):
     half = (1 << sector.n_orb) - 1
     valid = {mask for mask in masks if (mask & half).bit_count() == sector.n_alpha
@@ -62,7 +76,15 @@ def sqd_sector(data, sector: Sector, store, samples: Samples, *, seed: int = 7,
                ext_keep: int = 2000, total_spin: int | None = None,
                max_product_dimension: int = 50000,
                spin_completion: str = "configurations", return_wavefunction: bool = False,
-               wavefunction_format: str = "dense"):
+               wavefunction_format: str = "dense", recovery: bool = True):
+    """Sample-based quantum diagonalization in one particle sector.
+
+    ``recovery`` repairs bitstrings with the wrong particle numbers from the
+    running orbital occupations (self-consistent configuration recovery); with
+    ``recovery=False`` such bitstrings are discarded and one round is run, so
+    the subspace comes from the sampled valid configurations alone.
+    ``with_ext`` adds all single excitations of the leading configurations.
+    """
     if wavefunction_format not in ("dense", "selected_ci"):
         raise ValueError("Unknown wavefunction format")
     if spin_completion not in ("configurations", "product_closure"):
@@ -73,6 +95,8 @@ def sqd_sector(data, sector: Sector, store, samples: Samples, *, seed: int = 7,
             data.sector.n_alpha, data.sector.n_beta, data.sector.n_orb):
         raise ValueError("Sector differs from Hamiltonian")
     rng = np.random.default_rng(seed)
+    if not recovery:
+        max_iter = 1
     width = 2 * sector.n_orb
     values = np.concatenate([np.full(count, int(mask), dtype=np.int64)
                              for mask, count in samples.counts.items() if count > 0])
@@ -156,7 +180,8 @@ def sqd_sector(data, sector: Sector, store, samples: Samples, *, seed: int = 7,
         next_occupancy = np.zeros(width)
         union = set(carryover)
         for batch in batches:
-            masks = recover_configurations(batch, sector, occupancy, rng)
+            masks = (recover_configurations(batch, sector, occupancy, rng) if recovery
+                     else _valid_masks(batch, sector))
             union |= masks
             energy, vector, _, _, _, _ = diagonalize(masks | carryover)
             energies.append(energy)
@@ -210,5 +235,8 @@ def sqd_sector(data, sector: Sector, store, samples: Samples, *, seed: int = 7,
                     "n_roots_examined": roots_examined,
                     "batch_energies": trace[-1]["batch_energies"],
                     "batch_spread": trace[-1]["batch_spread"], "trace": trace,
-                    "energy_sqd": sqd_energy}
+                    "energy_sqd": sqd_energy,
+                    "sector_dimension": comb(sector.n_orb, sector.n_alpha) *
+                                        comb(sector.n_orb, sector.n_beta),
+                    "valid_fraction": len(_valid_masks_all(values, sector)) / len(values)}
     return (energy, diagnostics, wavefunction) if return_wavefunction else (energy, diagnostics)

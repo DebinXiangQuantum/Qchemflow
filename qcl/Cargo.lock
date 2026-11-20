@@ -165,6 +165,16 @@ dependencies = [
  "qcl-ci",
  "qcl-cluster",
  "qcl-ir",
+ "qcl-sched",
+ "serde_json",
+]
+
+[[package]]
+name = "qcl-sched"
+version = "0.1.0"
+dependencies = [
+ "qcl-ir",
+ "serde",
  "serde_json",
 ]
 

@@ -403,5 +403,41 @@ QCL_POLICY_FILE=qcl/apps/n2-policy.toml .venv/bin/python qcl/apps/n2_dissociatio
 QCL_POLICY_FILE=qcl/apps/n2-policy.toml .venv/bin/python qcl/apps/n2_dissociation.py --active 10 10
 ```
 
-The plan still runs in one worker that executes nodes in dependency order, so
-the lanes do not yet overlap in time.
+`plan.run(overlap=True)` (or `--overlap`) runs the compiled schedule described
+below, so the GPU, CPU and QPU lanes of different bond lengths overlap.
+
+## Scheduling: overlap and parallelism
+
+`plan.run()` runs one node at a time. `plan.run(overlap=True)` runs the schedule
+that `plan.schedule()` compiles (Rust crate `qcl-sched`):
+
+- nodes no output needs are removed, and equal nodes are merged (QPU jobs never
+  are);
+- ready nodes run highest upward rank first, so the critical path never waits
+  behind work that has slack;
+- every device lane runs concurrently, CPU lanes run several independent nodes at
+  once (sharing the cores), and cloud QPUs and local simulators keep several jobs
+  in flight; `device.with_options(slots=n)` sets a lane's concurrency;
+- lanes that do real work run in their own processes (`processes=None` decides by
+  predicted load; `True`/`False` forces it): one persistent process per GPU, whose
+  values stay on the GPU, and process pools for CPU and simulator lanes.
+
+```python
+schedule = plan.schedule()
+print(schedule["predicted"])   # sequential_s, makespan_s, critical_path_s, speedup
+result = plan.run(overlap=True)
+plan.profile()                 # per node: lane, start_s, end_s, duration_s
+```
+
+Measured durations refine later schedules through a profile cache
+(`$QCL_PROFILE_CACHE`, default `~/.cache/qcl/profile.json`, `off` to disable).
+Results do not depend on the schedule.
+
+## Hardware SQD experiment
+
+`apps/qpu_sqd_experiment.py` samples the same CCSD-seeded LUCJ circuit on a
+hardware QPU (`--qpu mq02`) and on an ideal simulator, runs SQD on both with and
+without configuration recovery (`qcl.sqd.diagonalize(..., recovery=False,
+extend=False)`), and computes CASCI. `docs/paper/` holds the report written from
+its runs on lqcloud MQ02, with `analysis.py` and `bench.py` that produce the
+figures and tables.

@@ -9,6 +9,7 @@ dependencies = [
     "pyscf==2.14.0",
     "pyyaml",
     "cryptography>=50.0.2",
+    "cloudpickle>=3",  # QCL lane processes ship values (PySCF objects hold lambdas)
 ]
 
 [project.optional-dependencies]

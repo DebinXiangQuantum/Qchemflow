@@ -32,7 +32,15 @@ class ArtifactStore:
         data = buffer.getvalue()
         reference = hashlib.sha256(data).hexdigest()
         if self.path:
-            (self.path / reference).write_bytes(data)
+            target = self.path / reference
+            if not target.exists():
+                # Several processes may share one store: never expose a partial file.
+                import os
+                import threading
+
+                partial = self.path / f".{reference}.{os.getpid()}.{threading.get_ident()}"
+                partial.write_bytes(data)
+                os.replace(partial, target)
         else:
             self.memory[reference] = data
         return reference

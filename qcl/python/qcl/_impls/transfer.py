@@ -8,6 +8,33 @@ from qcl._impls._common import (
 )
 
 
+def _holds_device_data(value, depth=0):
+    """True when ``value`` contains CuPy arrays or ctypes pointers (GPU handles)."""
+    import ctypes
+
+    if depth > 4:
+        return False
+    if type(value).__module__.split(".")[0] == "cupy" or isinstance(
+            value, (ctypes._Pointer, ctypes.c_void_p)):
+        return True
+    if isinstance(value, dict):
+        return any(_holds_device_data(item, depth + 1)
+                   for pair in value.items() for item in pair)
+    if isinstance(value, (list, tuple, set)):
+        return any(_holds_device_data(item, depth + 1) for item in value)
+    return hasattr(value, "__dict__") and type(value).__module__.split(".")[0] in (
+        "gpu4pyscf", "cupy")
+
+
+def _without_device_caches(mean_field):
+    """Drop private GPU caches that GPU4PySCF's ``to_cpu()`` leaves on the CPU object
+    (for example ``_opt_jengine``): a host copy must not hold device data."""
+    for name, value in list(vars(mean_field).items()):
+        if name.startswith("_") and _holds_device_data(value):
+            delattr(mean_field, name)
+    return mean_field
+
+
 @implements("copy")
 def _op_copy(ctx, node, identifier, operation, inputs):
     values = ctx.values
@@ -49,7 +76,7 @@ def _op_copy(ctx, node, identifier, operation, inputs):
             from types import SimpleNamespace
 
             source = inputs[0]["data"]
-            mean_field = source.mf.to_cpu()
+            mean_field = _without_device_caches(source.mf.to_cpu())
             if inputs[0]["method"]["family"] in ("UHF", "UKS"):
                 mean_field.mo_energy = _canonical_unrestricted_energies(mean_field)
             values[identifier] = {

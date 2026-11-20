@@ -21,7 +21,13 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any, get_type_hints
 
-from qcl._qcl import CI_MAX_DETERMINANTS, GraphBuilder, parse_cluster_json, primitives_json
+from qcl._qcl import (
+    CI_MAX_DETERMINANTS,
+    GraphBuilder,
+    parse_cluster_json,
+    primitives_json,
+    schedule_json,
+)
 from qcl._tensor_units import product_unit
 
 
@@ -43,8 +49,8 @@ class Device:
     options: dict[str, Any] = field(default_factory=dict)
 
     def with_options(self, **options: Any) -> Device:
-        allowed = {"cpu": {"threads"}, "gpu": {"precision", "memory_limit_gb"},
-                   "qpu": {"transpile", "mitigate", "max_shots"}}[self.kind]
+        allowed = {"cpu": {"threads", "slots"}, "gpu": {"precision", "memory_limit_gb", "slots"},
+                   "qpu": {"transpile", "mitigate", "max_shots", "slots"}}[self.kind]
         invalid = set(options) - allowed
         if invalid:
             raise CompileError([{"code": "QCL-E202", "source": _source(),
@@ -65,6 +71,8 @@ class Device:
                 type(options["transpile"]) is not int or options["transpile"] < 0)
             or "max_shots" in options and (
                 type(options["max_shots"]) is not int or options["max_shots"] < 1)
+            or "slots" in options and (
+                type(options["slots"]) is not int or options["slots"] < 1)
             or "mitigate" in options and options["mitigate"] not in ("none", "readout")
         )
         if value_error:
@@ -2560,7 +2568,14 @@ vqe = _VQE()
 
 class _SQD:
     def diagonalize(self, operator: _Value, bitstrings: _Value, sector: _Value,
-                    *, seed: int = 7) -> _Value:
+                    *, seed: int = 7, recovery: bool = True, extend: bool = True) -> _Value:
+        """Diagonalize ``operator`` in the subspace spanned by sampled configurations.
+
+        ``recovery`` repairs samples with the wrong particle numbers
+        (configuration recovery) instead of discarding them; ``extend`` adds the
+        single excitations of the leading configurations to the subspace.  Turn
+        both off to see what the samples alone contribute.
+        """
         if (not isinstance(operator, _Value) or operator.kind != "fermion_operator" or
                 not isinstance(bitstrings, _Value) or bitstrings.kind != "bitstrings" or
                 not isinstance(sector, _Value) or sector.kind != "sector"):
@@ -2576,9 +2591,19 @@ class _SQD:
             raise CompileError([{"code": "QCL-E101", "source": _source(),
                                  "message": "SQD seed must be a nonnegative integer",
                                  "hint": "Pass seed >= 0"}])
-        return _Value(operator.graph, operator.graph.sqd(operator.node_id, bitstrings.node_id,
-                                                         sector.node_id, seed, _source()),
-                      "estimate", operator.molecule, unit="hartree", family="SQD")
+        if type(recovery) is not bool or type(extend) is not bool:
+            raise CompileError([{"code": "QCL-E101", "source": _source(),
+                                 "message": "SQD recovery and extend must be booleans",
+                                 "hint": "Pass recovery=True/False and extend=True/False"}])
+        if recovery and extend:
+            node = operator.graph.sqd(operator.node_id, bitstrings.node_id, sector.node_id,
+                                      seed, _source())
+        else:
+            node = operator.graph.add_node(
+                "sqd.diagonalize", [operator.node_id, bitstrings.node_id, sector.node_id],
+                json.dumps({"seed": seed, "recovery": recovery, "extend": extend}), _source())
+        return _Value(operator.graph, node, "estimate", operator.molecule, unit="hartree",
+                      family="SQD")
 
 
 sqd = _SQD()
@@ -3064,6 +3089,7 @@ class Plan:
         self._budget = budget
         self._deterministic = deterministic
         self._profile: list[dict[str, Any]] | None = None
+        self._schedule: dict[str, Any] | None = None
         self._last_result: Any = None
         self._validations: list[dict[str, Any]] = []
         self.cpu_core_s: float | None = None
@@ -3727,8 +3753,84 @@ class Plan:
         self._validations.append(validation)
         return validation
 
+    def _output_ids(self) -> list[int]:
+        return sorted({value.node_id for value in _output_values(self._output)})
+
+    def schedule(self, *, slots: dict[str, int] | None = None,
+                 processes: bool | None = None,
+                 _graph: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Compile the dataflow schedule that ``run(overlap=True)`` executes.
+
+        The scheduler (Rust ``qcl-sched``) removes nodes no output needs,
+        merges equal nodes, ranks every node by its predicted cost plus the most
+        expensive path after it, and simulates dispatch on the device lanes.
+        Each lane runs up to ``slots`` nodes at once: by default CPUs split their
+        threads among independent nodes, cloud QPUs keep several jobs in
+        flight, and GPUs run one node at a time; ``device.with_options(slots=n)``
+        or the ``slots`` mapping overrides that. Predicted costs come from
+        measured profiles of earlier runs where available. Placement is never
+        changed, and results do not depend on the schedule.
+
+        CPU, GPU and local-simulator lanes run in their own worker processes
+        (``qcl._runtime``) when ``processes`` is true, or (``None``, the default)
+        when the lane is predicted to be busy for at least two seconds: in
+        threads of one process, Python-level work in every lane would contend
+        for one interpreter lock. A GPU lane process keeps its values on the
+        GPU; nodes that read them run there.
+        """
+        if processes is not None and type(processes) is not bool:
+            raise TypeError("processes must be a boolean or None")
+        from qcl import _costmodel
+
+        graph = _graph if _graph is not None else json.loads(self._graph.graph_json())
+        nodes = graph["nodes"]
+        costs = _costmodel.predict(nodes)
+        lane_slots = _costmodel.default_slots(nodes)
+        if slots is not None:
+            if not isinstance(slots, dict) or any(
+                    type(value) is not int or value < 1 for value in slots.values()):
+                raise ValueError("slots must map lane names to positive integers")
+            lane_slots.update(slots)
+        compiled = json.loads(schedule_json(
+            json.dumps(graph), json.dumps(self._output_ids()),
+            json.dumps({str(key): value for key, value in costs.items()}),
+            json.dumps(lane_slots)))
+        compiled["threads"] = _costmodel.lane_threads(nodes, compiled["slots"])
+        if self._deterministic:
+            # Deterministic plans keep single-threaded reductions in every lane.
+            compiled["threads"] = dict.fromkeys(compiled["threads"], 1)
+        compiled["costs"] = {str(key): costs[key] for key in compiled["execute"]}
+        busy = compiled["predicted"]["lane_busy_s"]
+        # Lanes that do real work in this process's interpreter: CPUs, GPUs and
+        # local QPU simulators (a cloud QPU lane only waits on the network).
+        local_lanes = {node["device"]["id"] for node in nodes
+                       if node.get("device") and node["kind"] == "compute" and
+                       (node["device"]["kind"] in ("cpu", "gpu") or
+                        node["device"].get("simulator_host"))}
+        compiled["processes"] = {lane: (busy.get(lane, 0.0) >= 2.0 if processes is None
+                                        else processes) for lane in sorted(local_lanes)}
+        predicted = compiled["predicted"]
+        predicted["speedup"] = (predicted["sequential_s"] / predicted["makespan_s"]
+                                if predicted["makespan_s"] > 0 else 1.0)
+        return compiled
+
     def run(self, *, timeout_s: float = 300,
-            cpu_core_s: float | None = None) -> Estimate | Any:
+            cpu_core_s: float | None = None, overlap: bool = False,
+            slots: dict[str, int] | None = None,
+            processes: bool | None = None) -> Estimate | Any:
+        """Execute the plan in a worker process.
+
+        ``overlap=False`` runs the nodes one at a time in program order.
+        ``overlap=True`` runs the compiled schedule of ``schedule()``: every
+        device lane works concurrently, a node starts as soon as its inputs
+        exist, ready nodes run critical path first, and each lane runs up to its
+        slot count at once (so independent CPU nodes share the cores and several
+        cloud QPU jobs wait at the same time). Results do not depend on the
+        schedule; ``profile()`` then reports per-lane CPU time and start/end
+        times, and the measured durations refine later schedules.
+        """
+        if type(overlap) is not bool:
+            raise TypeError("overlap must be a boolean")
         if (type(timeout_s) not in (int, float) or not math.isfinite(timeout_s) or
                 timeout_s <= 0):
             raise ValueError("timeout_s must be positive")
@@ -3753,6 +3855,9 @@ class Plan:
         cloud_qpu_policy = self._check_qpu_policy()
         worker_graph, worker_env, gpu_id = _isolated_gpu_worker(
             json.loads(self._graph.graph_json()))
+        compiled = (self.schedule(slots=slots, processes=processes, _graph=worker_graph)
+                    if overlap else None)
+        self._schedule = compiled
         if self._deterministic:
             worker_env = {**(worker_env or os.environ), **dict.fromkeys((
                 "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
@@ -3765,7 +3870,8 @@ class Plan:
                                   "output": output,
                                   "cloud_qpu_policy": cloud_qpu_policy,
                                   "cpu_core_s": cpu_core_s,
-                                  "deterministic": self._deterministic}),
+                                  "deterministic": self._deterministic,
+                                  "schedule": compiled}),
                 text=True, capture_output=True, check=False, timeout=timeout_s,
                 env=worker_env,
             )
@@ -3789,6 +3895,18 @@ class Plan:
         if gpu_id is not None:
             response = _restore_worker_gpu(response, gpu_id)
         self._profile = response["profile"]
+        from qcl import _costmodel
+
+        # Learn only from nodes that ran alone in their process: durations measured
+        # in threads that shared one interpreter include the other lanes' contention.
+        isolated = self._profile
+        if compiled is not None:
+            local = compiled.get("processes") or {}
+            isolated = [entry for entry in self._profile
+                        if local.get(entry["device"]) or      # ran in its lane process
+                        (entry["device"] not in local and    # cloud QPU: network wait
+                         entry["op"] in ("sample", "vqe.sampled", "estimate.quantum"))]
+        _costmodel.record(worker_graph["nodes"], isolated)
         result = self._decode_output(response["result"], self._output,
                                      datetime.now(UTC).isoformat())
         self._last_result = result

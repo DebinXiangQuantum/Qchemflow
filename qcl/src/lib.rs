@@ -85,6 +85,14 @@ struct GraphBuilder {
     graph: Graph,
 }
 
+/// Optimize and schedule a graph: dead-node and common-subexpression
+/// elimination, upward-rank priorities and a predicted makespan (qcl-sched).
+#[pyfunction]
+fn schedule_json(graph: &str, outputs: &str, costs: &str, slots: &str) -> PyResult<String> {
+    qcl_sched::schedule_json(graph, outputs, costs, slots)
+        .map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
 #[pymethods]
 impl GraphBuilder {
     #[new]
@@ -2099,6 +2107,7 @@ fn _qcl(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<GraphBuilder>()?;
     module.add_function(wrap_pyfunction!(parse_cluster_json, module)?)?;
     module.add_function(wrap_pyfunction!(primitives_json, module)?)?;
+    module.add_function(wrap_pyfunction!(schedule_json, module)?)?;
     module.add_function(wrap_pyfunction!(ci_ground_energy, module)?)?;
     module.add_function(wrap_pyfunction!(ci_ground_state, module)?)?;
     module.add_function(wrap_pyfunction!(ci_sigma, module)?)?;
