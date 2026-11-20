@@ -3,6 +3,14 @@ import pytest
 from pyscf import fci, gto, scf
 
 import qcl
+from chemflow.impls.pyscf_impls import canonical_orbitals
+
+
+def canonical(mean_field):
+    """QCL reports MO-basis quantities in canonical orbitals with fixed signs."""
+    mean_field.mo_coeff = canonical_orbitals(mean_field.mol, mean_field.mo_coeff,
+                                             mean_field.mo_energy, mean_field.mo_occ)
+    return mean_field
 
 
 @qcl.workflow
@@ -28,7 +36,7 @@ def test_fci_rdm1_matches_independent_pyscf():
     result = plan.run()
 
     mol = gto.M(atom=molecule.atoms, basis=molecule.basis, verbose=0)
-    mf = scf.RHF(mol).run()
+    mf = canonical(scf.RHF(mol).run())
     solver = fci.FCI(mf)
     _, vector = solver.kernel()
     expected = solver.make_rdm1(vector, 2, mol.nelec)
@@ -227,7 +235,7 @@ def test_fci_rdm2_matches_independent_pyscf(atoms, electrons, orbitals):
     molecule = qcl.Molecule(atoms, "sto-3g")
     cpu = qcl.Device("cpu0", "cpu")
     mol = gto.M(atom=atoms, basis="sto-3g", verbose=0)
-    mf = scf.RHF(mol).run()
+    mf = canonical(scf.RHF(mol).run())
     solver = fci.FCI(mf)
     _, vector = solver.kernel()
     expected = solver.make_rdm12(vector, orbitals, mol.nelec)[1]

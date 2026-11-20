@@ -134,13 +134,19 @@ def ligand_parameters(ligand, forcefield="gaff-2.11", charge_method="am1bcc", st
 
 
 def mmgbsa(complex, parameters, frames=0, minimize=False, seed=0, store=None):
+    """Single-trajectory MM/GBSA; added hydrogens are always relaxed first.
+
+    The structure that was evaluated (after hydrogen relaxation and any
+    minimization, for ``frames=0``) is recorded as ``evaluated_pdb_ref``.
+    """
     if parameters["ligand"] != complex["ligand"]:
         raise ValueError("Ligand parameters do not match the complex")
     result = call_tools("mmgbsa", {"pdb": read_text_artifact(complex["pdb_ref"]),
                         "ffxml": read_text_artifact(parameters["parameters_ref"]), "frames": frames,
-                        "minimize": minimize, "seed": seed})
+                        "minimize": minimize, "seed": seed, "relax_hydrogens": True})
+    evaluated = result.pop("evaluated_pdb")
     target = content_hash({"complex": complex, "parameters": parameters, "frames": frames,
-                           "minimize": minimize, "seed": seed})
+                           "minimize": minimize, "seed": seed, "relax_hydrogens": True})
     return BindingEstimate(**result, value=Q(result["dG_kcal"], "kcal/mol"),
         kind="binding_free_energy", target=target, relation="equivalent",
         context=Context(keys={"kind": "binding_free_energy", "unit": "kcal/mol",
@@ -150,6 +156,9 @@ def mmgbsa(complex, parameters, frames=0, minimize=False, seed=0, store=None):
         diagnostics={"model": "Amber14/GBn2 single-trajectory MM/GBSA",
                      "experimental_relation": "model_change",
                      "protonation_method": complex["protonation_method"],
+                     "hydrogen_relaxation": "H within 8 A of the ligand minimized in vacuum (Amber14 + ligand FF), other atoms fixed",
+                     **({"evaluated_pdb_ref": write_text_artifact(evaluated, ".pdb")}
+                        if evaluated is not None else {}),
                      "sampling": "naive frame standard error; correlated frames not corrected",
                      "entropy": "No configurational entropy correction"})
 

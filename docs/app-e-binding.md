@@ -64,6 +64,16 @@ residue name is preserved. All three subsystem energies use the same coordinates
 
 `dG = E(complex) - E(receptor alone) - E(ligand alone)`.
 
+Before any evaluation, the added hydrogens within 8 Å of the ligand are relaxed
+with every other atom fixed (vacuum Amber14 + ligand force field, one CPU thread,
+L-BFGS to 0.01 kJ/mol/nm), and the relaxed complex is evaluated at PDB precision
+and recorded as `diagnostics.evaluated_pdb_ref`. Hydrogen positions are not
+observed: PDBFixer and RDKit place methyl and hydroxyl hydrogens differently
+across versions, and one unrelaxed 1.6 Å H–H contact at the 181L interface
+(Val87) turned the single-point ΔG from about −15 to +12.9 kcal/mol. Two
+independent implementations of this relaxation agree to about 0.05 kcal/mol, so
+the apps-suite gate for this task is 0.1 kcal/mol.
+
 With zero frames this is a single point, optionally after up to 500 minimizer
 iterations. Positive frames use seeded 300 K Langevin dynamics (1/ps friction,
 1 fs steps, ten steps per frame). Seed zero maps to one to avoid OpenMM's

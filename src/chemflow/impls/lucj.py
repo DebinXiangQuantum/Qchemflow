@@ -118,7 +118,69 @@ def ccsd_seed_from_integrals(hamiltonian, sector: Sector, store, site_reference=
     return values
 
 
+def _string_rotation(n_orb: int, n_elec: int, kparams: np.ndarray) -> np.ndarray:
+    """exp(-K) for one spin, as a matrix on that spin's occupation strings.
+
+    K = sum_(p<q) kappa_pq (a+_p a_q - a+_q a_p). A same-spin excitation changes the
+    other spin's bits not at all and crosses each of them an even number of times,
+    so the sector operator is exp(-K_alpha) (x) exp(-K_beta).
+    """
+    from scipy.linalg import expm
+
+    from chemflow.impls.fci import _annihilate, _create
+
+    strings = [sum(1 << orbital for orbital in occupied)
+               for occupied in combinations(range(n_orb), n_elec)]
+    position = {bits: index for index, bits in enumerate(strings)}
+    generator = np.zeros((len(strings), len(strings)))
+    for index, (left, right) in enumerate(combinations(range(n_orb), 2)):
+        kappa = float(kparams[index])
+        if kappa == 0.0:
+            continue
+        for column, bits in enumerate(strings):
+            removed = _annihilate(bits, right)
+            if removed is None:
+                continue
+            created = _create(removed[0], left)
+            if created is None:
+                continue
+            generator[position[created[0]], column] += kappa * removed[1] * created[1]
+    return expm(-(generator - generator.T))
+
+
 def lucj_state(sector: Sector, layers: list[LucjParams]) -> np.ndarray:
+    """LUCJ state in the sector basis of ``sector_states`` (alpha strings outer).
+
+    Each layer is exp(K) exp(i J) exp(-K) applied to the Hartree-Fock state; the
+    orbital rotations act on the alpha and beta strings separately (two small dense
+    matrices on the state reshaped to alpha x beta) and the Jastrow phases are
+    diagonal in the occupation basis.
+    """
+    n_orb = sector.n_orb
+    alpha_count = math.comb(n_orb, sector.n_alpha)
+    beta_count = math.comb(n_orb, sector.n_beta)
+    bits = np.asarray(sector_states(sector), dtype=np.int64)
+    occupied = ((bits[:, None] >> np.arange(2 * n_orb)) & 1).astype(float)
+    state = hf_vector(sector).astype(complex).reshape(alpha_count, beta_count)
+    for layer in layers:
+        alpha = _string_rotation(n_orb, sector.n_alpha, layer.kparams)
+        beta = (alpha if sector.n_beta == sector.n_alpha else
+                _string_rotation(n_orb, sector.n_beta, layer.kparams))
+        state = alpha @ state @ beta.T
+        phases = np.zeros(len(bits))
+        for orbital in range(n_orb - 1):
+            for offset in (0, n_orb):
+                phases += (layer.j_same[orbital] * occupied[:, offset + orbital] *
+                           occupied[:, offset + orbital + 1])
+        for orbital in range(0, n_orb, 4):
+            phases += layer.j_opp[orbital // 4] * occupied[:, orbital] * occupied[:, n_orb + orbital]
+        state = state * np.exp(1j * phases).reshape(alpha_count, beta_count)
+        state = alpha.T @ state @ beta
+    return state.reshape(-1)
+
+
+def lucj_state_reference(sector: Sector, layers: list[LucjParams]) -> np.ndarray:
+    """The direct sparse construction in the full sector (slow; kept for tests)."""
     n_orb = sector.n_orb
     states = sector_states(sector)
     state = hf_vector(sector).astype(complex)

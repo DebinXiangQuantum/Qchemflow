@@ -1,3 +1,4 @@
+from functools import lru_cache
 from itertools import combinations
 from math import comb
 
@@ -23,10 +24,17 @@ def _create(bits: int, index: int) -> tuple[int, int] | None:
 
 
 def sector_states(sector: Sector) -> list[int]:
-    return [sum(1 << orbital for orbital in alpha) |
-            sum(1 << (orbital + sector.n_orb) for orbital in beta)
-            for alpha in combinations(range(sector.n_orb), sector.n_alpha)
-            for beta in combinations(range(sector.n_orb), sector.n_beta)]
+    """Determinants of the sector as bit masks: alpha strings outer, beta inner."""
+    return list(_sector_states(sector.n_orb, sector.n_alpha, sector.n_beta))
+
+
+@lru_cache(maxsize=16)
+def _sector_states(n_orb: int, n_alpha: int, n_beta: int) -> tuple[int, ...]:
+    alphas = [sum(1 << orbital for orbital in alpha)
+              for alpha in combinations(range(n_orb), n_alpha)]
+    betas = [sum(1 << (orbital + n_orb) for orbital in beta)
+             for beta in combinations(range(n_orb), n_beta)]
+    return tuple(alpha | beta for alpha in alphas for beta in betas)
 
 
 def spin_square(vector: np.ndarray, sector: Sector) -> float:

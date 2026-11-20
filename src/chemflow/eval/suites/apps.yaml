@@ -4801,7 +4801,9 @@ tasks:
       seed: 0
     gates:
     - kind: abs_error_vs_exact
-      threshold: 0.01
+      # Added hydrogens near the ligand are relaxed before the single point; two
+      # independent implementations reach the same relaxed minimum to ~0.05 kcal/mol.
+      threshold: 0.1
       unit: kcal/mol
       relation: null
     - kind: relation_at_least
@@ -4822,7 +4824,7 @@ tasks:
   expected:
     # Observed policies stop on the model-defined MM/GBSA control; no refusal is expected.
     decision_in: [stop]
-    value: -10.220621147385526
+    value: -15.461407910366114
     unit: kcal/mol
   reference_source: 'Independent direct-library recomputation: scripts/eval_reference_values.py
     --suite apps; no ChemFlow pipeline imports.'

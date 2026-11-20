@@ -3,6 +3,14 @@ import pytest
 from pyscf import ao2mo, fci, gto, scf
 
 import qcl
+from chemflow.impls.pyscf_impls import canonical_orbitals
+
+
+def canonical(mean_field):
+    """QCL reports MO-basis quantities in canonical orbitals with fixed signs."""
+    mean_field.mo_coeff = canonical_orbitals(mean_field.mol, mean_field.mo_coeff,
+                                             mean_field.mo_energy, mean_field.mo_occ)
+    return mean_field
 
 
 @qcl.workflow
@@ -32,7 +40,7 @@ def test_ci_sigma_matches_independent_pyscf_and_eigenvalue(
     coefficients, product, energy = plan.run()
 
     system = gto.M(atom=atoms, basis="sto-3g", verbose=0)
-    mean_field = scf.RHF(system).run()
+    mean_field = canonical(scf.RHF(system).run())
     h1 = mean_field.mo_coeff.T @ mean_field.get_hcore() @ mean_field.mo_coeff
     eri = ao2mo.kernel(system, mean_field.mo_coeff)
     absorbed = fci.direct_spin1.absorb_h1e(h1, eri, orbitals,
@@ -111,7 +119,7 @@ def test_user_ci_vector_sigma_matches_pyscf_for_random_coefficients():
         strict_transfers=True).run()
 
     system = gto.M(atom=atoms, basis="sto-3g", verbose=0)
-    mean_field = scf.RHF(system).run()
+    mean_field = canonical(scf.RHF(system).run())
     h1 = mean_field.mo_coeff.T @ mean_field.get_hcore() @ mean_field.mo_coeff
     eri = ao2mo.kernel(system, mean_field.mo_coeff)
     absorbed = fci.direct_spin1.absorb_h1e(h1, eri, 4, (2, 2), 0.5)
@@ -218,7 +226,7 @@ def test_user_ci_vector_sigma_runs_on_gpu():
                                     strict_transfers=True).run()
     assert product.device == "gpu0"
     system = gto.M(atom=molecule.atoms, basis=molecule.basis, verbose=0)
-    mean_field = scf.RHF(system).run()
+    mean_field = canonical(scf.RHF(system).run())
     h1 = mean_field.mo_coeff.T @ mean_field.get_hcore() @ mean_field.mo_coeff
     eri = ao2mo.kernel(system, mean_field.mo_coeff)
     absorbed = fci.direct_spin1.absorb_h1e(h1, eri, 2, (1, 1), 0.5)

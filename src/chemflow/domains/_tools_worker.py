@@ -129,7 +129,34 @@ def ligand_parameters(sdf, forcefield="gaff-2.11", charge_method="am1bcc"):
                 "forcefield": forcefield, "charge_method": charge_method}
 
 
-def mmgbsa(pdb, ffxml, frames=0, minimize=False, seed=0):
+def _relax_hydrogens(system, topology, positions, ligand_indices, radius_nm=0.8):
+    """Minimize the hydrogens near the ligand with every other atom held fixed.
+
+    Hydrogens are added by PDBFixer and RDKit, not observed: their methyl and
+    hydroxyl orientations depend on library versions, and an unrelaxed H-H
+    contact of 1.6 A at the interface adds about 10 kcal/mol of repulsion to a
+    single point. Hydrogens farther than ``radius_nm`` from every ligand atom
+    sit at the same positions in the complex and the receptor evaluations, so
+    they are left where they are. One CPU thread keeps the result bitwise
+    reproducible.
+    """
+    import numpy as np
+    from openmm import Context, LocalEnergyMinimizer, Platform, VerletIntegrator, unit
+
+    coordinates = np.asarray(positions.value_in_unit(unit.nanometer))
+    ligand = coordinates[ligand_indices]
+    for atom in topology.atoms():
+        near = np.min(np.linalg.norm(ligand - coordinates[atom.index], axis=1)) <= radius_nm
+        if atom.element is None or atom.element.symbol != "H" or not near:
+            system.setParticleMass(atom.index, 0 * unit.dalton)
+    platform = Platform.getPlatformByName("CPU")
+    context = Context(system, VerletIntegrator(0.001), platform, {"Threads": "1"})
+    context.setPositions(positions)
+    LocalEnergyMinimizer.minimize(context, 0.01, 0)
+    return context.getState(getPositions=True).getPositions()
+
+
+def mmgbsa(pdb, ffxml, frames=0, minimize=False, seed=0, relax_hydrogens=True):
     import numpy as np
     from openmm import Context, LangevinMiddleIntegrator, Platform, VerletIntegrator, app, unit
 
@@ -154,6 +181,17 @@ def mmgbsa(pdb, ffxml, frames=0, minimize=False, seed=0):
         integrators.append(integrator)
         contexts.append(Context(system, integrator, platform))
     positions = structure.positions
+    if relax_hydrogens:
+        # Relaxation removes steric contacts; the vacuum force field is enough for
+        # that and much cheaper than GBn2. The evaluation below still uses GBn2.
+        vacuum = app.ForceField("amber14-all.xml", io.StringIO(ffxml))
+        positions = _relax_hydrogens(
+            vacuum.createSystem(structure.topology, nonbondedMethod=app.NoCutoff,
+                                constraints=None), structure.topology, positions,
+            ligand_indices)
+        # Evaluate exactly the coordinates that are recorded (PDB precision).
+        positions = app.PDBFile(io.StringIO(serialize_pdb(structure.topology,
+                                                          positions))).positions
     simulation = None
     if minimize or frames:
         system = forcefield.createSystem(structure.topology, nonbondedMethod=app.NoCutoff,
@@ -182,7 +220,8 @@ def mmgbsa(pdb, ffxml, frames=0, minimize=False, seed=0):
         samples.append(energies)
     means = np.mean(samples, axis=0)
     values = np.asarray(samples) @ np.array([1, -1, -1])
-    return {"dG_kcal": float(np.mean(values)), "components": dict(zip(
+    evaluated = serialize_pdb(structure.topology, positions) if not frames else None
+    return {"evaluated_pdb": evaluated, "dG_kcal": float(np.mean(values)), "components": dict(zip(
                 ("complex", "receptor", "ligand"), means.tolist(), strict=True)),
             "stderr": (float(np.std(values, ddof=1) / np.sqrt(frames)) if frames > 1 else
                        None if frames == 1 else 0.0),

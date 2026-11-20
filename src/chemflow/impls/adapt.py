@@ -35,7 +35,11 @@ def adapt_vqe(engine: SectorEngine, sector: Sector, threshold: float = 1e-3,
         available = [index for index in range(len(pool)) if index not in selected]
         if not available:
             break
-        index = max(available, key=lambda candidate: abs(gradients[candidate]))
+        # Symmetry-equivalent operators have gradients equal up to rounding; compare
+        # magnitudes at 1e-9 so ties go to the lowest index whatever the BLAS
+        # threading, instead of to whichever operator the last bit favours.
+        index = max(available, key=lambda candidate: (round(abs(gradients[candidate]), 9),
+                                                      -candidate))
         if abs(gradients[index]) < threshold:
             break
         selected.append(index)

@@ -104,11 +104,67 @@ class LqcloudBackend:
                     "qpu_s_p99": predict("device_p99_s"),
                     "qpu_s_max_observed": predict("device_max_s")}}
 
+    # Circuit angles that differ by less than this (radians) are the same job: far below
+    # the device's control resolution, far above run-to-run floating-point noise.
+    parameter_tolerance = 1e-6
+
+    def _structure(self, prep, shots: int, repetition: int) -> str | None:
+        """Hash of everything that defines the submitted job except its angles."""
+        from chemflow.types import CircuitSpec
+
+        circuit = getattr(prep, "circuit", None)
+        if not isinstance(circuit, CircuitSpec):
+            return None
+        return content_hash({"backend": self.backend, "impl_id": self.identifier,
+                             "ansatz": circuit.ansatz, "n_orb": circuit.n_orb,
+                             "n_alpha": circuit.n_alpha, "n_beta": circuit.n_beta,
+                             "measurement_basis": circuit.measurement_basis,
+                             "n_qubits": circuit.n_qubits, "n_clbits": circuit.n_clbits,
+                             "gates": list(circuit.gates),
+                             "layer_sizes": [len(layer) for layer in circuit.layers],
+                             "shots": shots, "repetition": repetition})
+
+    @staticmethod
+    def _angles(prep) -> list[float] | None:
+        from chemflow.types import CircuitSpec
+
+        circuit = getattr(prep, "circuit", None)
+        if not isinstance(circuit, CircuitSpec):
+            return None
+        return [float(value) for layer in circuit.layers for value in layer]
+
+    def _matching_record(self, prep, shots: int, repetition: int) -> Path | None:
+        """A recorded job for the same circuit, angles equal within the tolerance.
+
+        The angles come from SCF and CCSD, which are not bitwise reproducible
+        across runs (GPU SCF accumulates with atomics), so an exact content hash
+        alone would resubmit, and pay for, the same circuit on every rerun.
+        """
+        structure = self._structure(prep, shots, repetition)
+        if structure is None or not self.state_dir.is_dir():
+            return None
+        angles = self._angles(prep)
+        for path in sorted(self.state_dir.glob("*.json")):
+            try:
+                record = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            recorded = record.get("parameters")
+            if (record.get("structure") == structure and isinstance(recorded, list) and
+                    len(recorded) == len(angles) and
+                    all(abs(left - right) <= self.parameter_tolerance
+                        for left, right in zip(recorded, angles, strict=True))):
+                return path
+        return None
+
     def record_path(self, prep, shots: int, repetition: int = 0) -> Path:
         key = content_hash({"backend": self.backend, "impl_id": self.identifier,
                             "prep": prep.model_dump(mode="json"), "shots": shots,
                             "repetition": repetition})
-        return self.state_dir / f"{key}.json"
+        exact = self.state_dir / f"{key}.json"
+        if exact.exists():
+            return exact
+        return self._matching_record(prep, shots, repetition) or exact
 
     def _archive(self, path: Path) -> None:
         archive = self.state_dir / "archive"
@@ -179,6 +235,8 @@ class LqcloudBackend:
             program = to_lqcloud(native)
             record = {"key": key, "state": "prepared", "backend": self.backend,
                       "impl_id": self.identifier, "shots": shots, "layout": layout,
+                      "structure": self._structure(prep, shots, repetition),
+                      "parameters": self._angles(prep),
                       "circuit_hash": content_hash(str(native)),
                       "predicted_cost": self.prediction(shots),
                       "diagnostics": {name: config[name] for name in (

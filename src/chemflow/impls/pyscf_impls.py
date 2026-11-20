@@ -57,6 +57,71 @@ def build_molecule(atoms: str, model: ElectronicModel, store: ArtifactStore,
     return _from_scf(mf, model, store, active, atoms, unit, charge, spin)
 
 
+# Probe points (unit-free offsets, scaled by the molecule's extent) and weights for the
+# symmetry-breaking operator used to fix degenerate orbitals. Any fixed generic values
+# work; they only must not lie on symmetry elements of common molecules.
+_PROBE_OFFSETS = ((0.37, 0.61, 0.23), (-0.52, 0.18, 0.71), (0.44, -0.67, -0.29),
+                  (-0.21, -0.39, 0.58), (0.69, 0.27, -0.48), (-0.63, 0.55, -0.17),
+                  (0.12, -0.24, -0.81), (0.83, -0.11, 0.35), (-0.31, 0.79, 0.41),
+                  (-0.77, -0.58, -0.09), (0.26, 0.47, -0.66), (0.58, 0.72, 0.64))
+_PROBE_EXPONENT = 0.6
+
+
+def _probe_operator(mol) -> np.ndarray:
+    coordinates = mol.atom_coords()
+    charges = mol.atom_charges()
+    center = charges @ coordinates / charges.sum()
+    extent = float(np.max(np.linalg.norm(coordinates - center, axis=1))) + 1.0
+    probe = gto.Mole()
+    probe.atom = [("H", tuple(center + extent * np.asarray(offset)))
+                  for offset in _PROBE_OFFSETS]
+    probe.basis = {"H": [[0, [_PROBE_EXPONENT, 1.0]]]}
+    probe.unit = "Bohr"
+    probe.spin = len(_PROBE_OFFSETS) % 2
+    probe.verbose = 0
+    probe.build()
+    cross = gto.intor_cross("int1e_ovlp", mol, probe)
+    weights = 1.0 + np.arange(len(_PROBE_OFFSETS)) / len(_PROBE_OFFSETS)
+    return (cross * weights) @ cross.T
+
+
+def canonical_orbitals(mol, mo_coeff, mo_energy, mo_occ, tol: float = 1e-6) -> np.ndarray:
+    """Make the canonical orbitals a deterministic function of the molecule.
+
+    SCF fixes orbitals only up to a rotation inside each degenerate block (the
+    pi and delta pairs of a linear molecule, for example) and a sign per
+    orbital, and the eigensolver's choice varies between runs and devices.
+    Energies do not depend on it, but bitstrings, CCSD-seeded LUCJ circuits and
+    anything else written in the orbital basis do. Inside each block of equal
+    energy and occupation the orbitals are rotated to diagonalize a fixed
+    operator built from s-type probe functions at generic points (so that no
+    spatial symmetry survives); each orbital's largest AO coefficient (the
+    first, among ties) is then made positive.
+    """
+    coefficients = np.array(mo_coeff, dtype=float, copy=True)
+    energies = np.asarray(mo_energy, dtype=float)
+    occupations = np.asarray(mo_occ, dtype=float)
+    blocks, start = [], 0
+    for index in range(1, len(energies) + 1):
+        if (index == len(energies) or abs(energies[index] - energies[index - 1]) > tol or
+                occupations[index] != occupations[index - 1]):
+            if index - start > 1:
+                blocks.append(range(start, index))
+            start = index
+    if blocks:
+        operator = _probe_operator(mol)
+        for block in blocks:
+            sub = coefficients[:, block]
+            _, vectors = np.linalg.eigh(sub.T @ operator @ sub)
+            coefficients[:, block] = sub @ vectors
+    for column in range(coefficients.shape[1]):
+        magnitudes = np.abs(coefficients[:, column])
+        leading = int(np.flatnonzero(magnitudes >= magnitudes.max() - 1e-8)[0])
+        if coefficients[leading, column] < 0:
+            coefficients[:, column] *= -1
+    return coefficients
+
+
 def _from_scf(mf: scf.hf.SCF, model: ElectronicModel, store: ArtifactStore,
               active: ActiveSpaceSpec | None, atoms: str, unit: str,
               charge: int, spin: int) -> MolecularData:
@@ -76,12 +141,15 @@ def _from_scf(mf: scf.hf.SCF, model: ElectronicModel, store: ArtifactStore,
     if model.frozen_core and model.frozen_core != n_frozen:
         raise AdapterError("CF-E020", None, "Frozen-core partition differs from model",
                            "Align active electrons and frozen core")
+    mo_coeff = canonical_orbitals(mol, mf.mo_coeff, mf.mo_energy, mf.mo_occ)
+    # Same density, same energies: keep the mean field consistent with the integrals.
+    mf.mo_coeff = mo_coeff
     cas = mcscf.CASCI(mf, n_orb, n_elec)
-    cas.mo_coeff = mf.mo_coeff
+    cas.mo_coeff = mo_coeff
     cas.ncore = n_frozen
     h1, ecore = cas.get_h1eff()
     eri = ao2mo.restore(1, cas.get_h2eff(), n_orb)
-    space = OrbitalSpace(coefficients_ref=store.put(np.asarray(mf.mo_coeff)),
+    space = OrbitalSpace(coefficients_ref=store.put(mo_coeff),
                          n_orb=n_orb, n_elec=n_elec, frozen_orbitals=n_frozen)
     ledger = ConstantLedger().add("nuclear_repulsion", Q(mol.energy_nuc(), "hartree"))
     if n_frozen:
