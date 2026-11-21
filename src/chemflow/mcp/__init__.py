@@ -1,4 +1,4 @@
-"""Task-bound, role-scoped MCP adapter for the ChemFlow tool registry."""
+"""Task-bound MCP adapter for the QCL engine's tools (read, compile and run screens)."""
 
 from __future__ import annotations
 
@@ -11,16 +11,14 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from chemflow.agent.task import TaskRecord
-from chemflow.agent.tools import make_tools
 from chemflow.diagnostics import AdapterError
-from chemflow.domains import load_registry
 from chemflow.ids import canonical_json
-from chemflow.runtime import Executor
 from chemflow.signing import TaskVerifier
 
-PROFILES = ("planner", "modeler", "designer", "critic", "analyst", "full")
 # The QCL engine's tools: read the signed task, compile and run its screens.
 QCL_PROFILE = "qcl"
+PROFILES = (QCL_PROFILE,)
+ROLE = "orchestrator"
 
 
 def _install_strict_schema(server, name: str, schema: dict) -> None:
@@ -42,25 +40,14 @@ def load_task(path: str, verifier: TaskVerifier) -> tuple[TaskRecord, TaskVerifi
 
 
 def create_server(profile: str, task: str, *, public_key: str,
-                  journal: str | None = None, key_fingerprint: str | None = None,
-                  qpu: str | None = None, gpu: bool = False, packs: str = "molecular"):
+                  journal: str | None = None, key_fingerprint: str | None = None):
     from mcp.server.mcpserver import MCPServer
 
     tools = create_tools(profile, task, public_key=public_key,
-                         key_fingerprint=key_fingerprint, qpu=qpu, gpu=gpu, packs=packs)
+                         key_fingerprint=key_fingerprint)
     journal = journal or str(Path(task).with_suffix(".journal"))
     server = MCPServer("chemflow")
-    role = "orchestrator" if profile in ("full", QCL_PROFILE) else profile
-    schemas = tools.schemas(role)
-    owners = {item["name"]: role for item in schemas}
-    if profile == "full":
-        schemas = []
-        owners = {}
-        for candidate in PROFILES[:-1]:
-            for item in tools.schemas(candidate):
-                if item["name"] not in owners:
-                    owners[item["name"]] = candidate
-                    schemas.append(item)
+    schemas = tools.schemas(ROLE)
     for schema in schemas:
         name = schema["name"]
         mcp_name = name.replace(".", "_")
@@ -89,60 +76,42 @@ def create_server(profile: str, task: str, *, public_key: str,
                                         for field_name, field in model.model_fields.items()}
             return dispatch
 
-        server.add_tool(dispatch_factory(name, input_model, owners[name]), name=mcp_name,
+        server.add_tool(dispatch_factory(name, input_model, ROLE), name=mcp_name,
                         description=schema["description"], structured_output=False)
         _install_strict_schema(server, mcp_name, schema["parameters"])
     return server
 
 
 def create_tools(profile: str, task: str, *, public_key: str,
-                 key_fingerprint: str | None = None, qpu: str | None = None,
-                 gpu: bool = False, packs: str = "molecular"):
-    if profile not in (*PROFILES, QCL_PROFILE):
+                 key_fingerprint: str | None = None):
+    if profile not in PROFILES:
         raise ValueError("Unknown role profile")
     verifier = TaskVerifier(Path(public_key).read_bytes())
     if key_fingerprint is not None and key_fingerprint != verifier.fingerprint:
         raise ValueError("CF-E120: Public key fingerprint mismatch")
-    record, store = load_task(task, verifier)
-    if profile == QCL_PROFILE:
-        import qcl
-        from chemflow.agent.qcl_tools import make_session_tools
+    record, _ = load_task(task, verifier)
+    import qcl
+    from chemflow.agent.qcl_tools import make_session_tools
 
-        directory = Path(task).resolve().parent / ".chemflow-qcl"
-        directory.mkdir(exist_ok=True)
-        return make_session_tools(record, qcl.Cluster.local(), directory)
-    registry = load_registry([name.strip() for name in packs.split(",")])
-    if gpu:
-        from chemflow.backends.gpu import register_gpu
-
-        register_gpu(registry)
-    if qpu is not None:
-        from chemflow.backends.lqcloud import LqcloudBackend, register_lqcloud
-
-        register_lqcloud(registry, LqcloudBackend(backend=qpu),
-                         identifier=f"lqcloud_{qpu.lower()}")
-    return make_tools(registry, Executor(registry), record, store,
-                      plan_directory=Path(task).resolve().parent / ".chemflow-plans")
+    directory = Path(task).resolve().parent / ".chemflow-qcl"
+    directory.mkdir(exist_ok=True)
+    return make_session_tools(record, qcl.Cluster.local(), directory)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Task-bound ChemFlow MCP tool server",
                                      allow_abbrev=False)
-    parser.add_argument("--profile", choices=(*PROFILES, QCL_PROFILE), required=True)
+    parser.add_argument("--profile", choices=PROFILES, default=QCL_PROFILE)
     parser.add_argument("--task", required=True)
     parser.add_argument("--public-key", required=True)
     parser.add_argument("--key-fingerprint")
     parser.add_argument("--transport", choices=("stdio", "http"), default="stdio")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--journal")
-    parser.add_argument("--qpu", choices=("MQ02",))
-    parser.add_argument("--gpu", action="store_true")
-    parser.add_argument("--packs", default="molecular")
     args = parser.parse_args()
     try:
         server = create_server(args.profile, args.task, public_key=args.public_key,
-                               key_fingerprint=args.key_fingerprint, journal=args.journal,
-                               qpu=args.qpu, gpu=args.gpu, packs=args.packs)
+                               key_fingerprint=args.key_fingerprint, journal=args.journal)
     except (OSError, ValueError, TypeError, RuntimeError) as exc:
         print(f"CF-E120: {exc}", file=sys.stderr)
         raise SystemExit(2) from None

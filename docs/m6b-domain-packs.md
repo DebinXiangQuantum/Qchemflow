@@ -1,5 +1,11 @@
 # M6b domain packs
 
+> **Status (2026-11-21).** This guide records a milestone built on ChemFlow's earlier
+> engine (IR programs, registry operators, static checker and orchestrator), which has
+> been removed. The science and the validation below still hold; signed tasks now run as
+> QCL screens, and the operations named here map to QCL primitives or plain kernels as
+> listed in [legacy-retirement.md](legacy-retirement.md).
+
 Load `load_registry(["molecular", "qmmm", "drug", "synthesis"])`, or pass
 `--packs molecular,qmmm,drug,synthesis` to `chemflow-mcp`. Imports are lazy;
 no package installation or network access occurs in these adapters. Registry

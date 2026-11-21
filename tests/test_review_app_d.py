@@ -87,41 +87,8 @@ def test_d1_the_esol_card_matches_an_independent_refit() -> None:
     assert card["applicability"]["tanimoto_threshold"] == 0.3
 
 
-def _execute(builder_fn):
-    from chemflow import build
-    from chemflow.domains import load_registry, pack_names
-    from chemflow.runtime import Executor
-
-    with build.program("d") as builder:
-        node = builder_fn(builder)
-    return Executor(load_registry(pack_names())).run(builder.to_ir())[node.id]
-
-
 def _get(result, key):
     return result[key] if isinstance(result, dict) else getattr(result, key)
-
-
-def test_d2_logs_esol_and_its_applicability_domain() -> None:
-    coefficients, _, _ = _refit()
-    aspirin = "CC(=O)Oc1ccccc1C(=O)O"
-    result = _execute(lambda b: b.node("logs_esol", molecule_smiles=aspirin))
-    assert _get(result, "value") == pytest.approx(
-        float(np.dot(coefficients, [1.0, *_descriptors(aspirin)])), abs=1e-9)
-    assert _get(result, "validity_status") == "inside_domain"
-    ferrocene = "[CH-]1C=CC=C1.[CH-]1C=CC=C1.[Fe+2]"
-    outside = _execute(lambda b: b.node("logs_esol", molecule_smiles=ferrocene))
-    assert _get(outside, "validity_status") == "outside_domain"
-
-
-def test_d2_general_solubility_equation() -> None:
-    from rdkit import Chem
-    from rdkit.Chem import Crippen
-
-    smiles = "c1ccc2ccccc2c1"  # naphthalene, mp 80 C
-    result = _execute(lambda b: b.node("logs_gse", molecule_smiles=smiles,
-                                       melting_point_C=80.0))
-    expected = 0.5 - 0.01 * (80.0 - 25.0) - Crippen.MolLogP(Chem.MolFromSmiles(smiles))
-    assert _get(result, "value") == pytest.approx(expected, abs=1e-12)
 
 
 def test_d3_aqueous_solubility_through_the_agent(tmp_path) -> None:

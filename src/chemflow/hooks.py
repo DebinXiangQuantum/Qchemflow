@@ -9,7 +9,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from chemflow.agent.tools import DESCRIPTIONS
+from chemflow.agent.qcl_tools import DESCRIPTIONS
 from chemflow.ids import canonical_json
 
 WRITE_TOOLS = frozenset({"write", "edit", "multiedit", "notebookedit", "apply_patch",
@@ -112,7 +112,6 @@ def _record(path: Path, event: dict, tool: str, arguments: dict, *, blocked: str
     entry = {"event": "blocked" if blocked else "post", "tool": tool,
              "session_id": event.get("session_id") or event.get("tool_call_id"),
              "profile": event.get("profile"),
-             "scale": arguments.get("scale", "screen") if tool == "run" else None,
              "outcome": "blocked" if blocked else
              "error" if event.get("is_error") or event.get("tool_error") else "ok"}
     if blocked:
@@ -148,15 +147,7 @@ def evaluate(event: dict, *, journal: str | None = None,
         if tool is not None:
             _record(path, event, tool, arguments)
         return None
-    entries = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()] if path.exists() else []
-    screened = any(item.get("tool") == "run" and item.get("scale") == "screen" and
-                   item.get("outcome") == "ok" for item in entries)
-    reported = any(item.get("tool") == "report.write" and item.get("outcome") == "ok"
-                   for item in entries)
-    if screened and not reported:
-        reason = "ChemFlow screened results require a successful report_write before stop"
-        _record(path, event, name, arguments, blocked=reason)
-        return reason
+    # screen.run writes the report itself, so a session may stop at any point.
     return None
 
 

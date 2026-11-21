@@ -4,13 +4,11 @@ from argparse import Namespace
 from types import SimpleNamespace
 
 import pytest
-from test_agent_cli_run import invoke, signed
+from llm_tools import ToolRegistry
 
 from chemflow.agent import cli as agent_cli
 from chemflow.agent.journal import Journal
-from chemflow.agent.llm import CONTRACTS, LLMPolicy
-from chemflow.agent.policies import ScriptedPolicy
-from chemflow.agent.tools import ToolRegistry
+from chemflow.agent.llm import LLMPolicy
 from chemflow.cli import main
 
 openai = pytest.importorskip("openai")
@@ -48,37 +46,6 @@ def test_factory_configuration(monkeypatch, model):
     assert client.model == (model or "glm-5.3")
     assert configurations == [{"api_key": "offline-glm-secret",
         "base_url": "https://open.bigmodel.cn/api/paas/v4/", "max_retries": 0, "timeout": 120}]
-
-
-def test_selected_roles_and_journal(tmp_path, monkeypatch):
-    configurations, calls = fake_sdk(monkeypatch)
-    agents = []
-    original = agent_cli.Orchestrator
-
-    def orchestrator(*args, **kwargs):
-        agent = original(*args, **kwargs)
-        agents.append(agent)
-        return agent
-
-    monkeypatch.setattr(agent_cli, "Orchestrator", orchestrator)
-    _, task, key = signed(tmp_path)
-    out = tmp_path / "run"
-    invoke(monkeypatch, task, key, out, "--policy", "glm", "--roles", "designer,analyst")
-    assert len(configurations) == 2
-    for role in CONTRACTS:
-        policy = agents[0].policies[role]
-        if role in {"designer", "analyst"}:
-            assert isinstance(policy, LLMPolicy)
-            assert policy.provider == "glm" and policy.client.model == "glm-5.3"
-        else:
-            assert isinstance(policy, ScriptedPolicy)
-    entries = [json.loads(line) for line in (out / "journal.jsonl").read_text().splitlines()]
-    decisions = [entry["decision"] for entry in entries if entry["state"] == "LLM_CALL"]
-    assert decisions and len(decisions) == len(calls)
-    for decision in decisions:
-        assert decision["provider"] == "glm" and decision["model"] == "glm-5.3"
-        assert decision["usage"] == {"input_tokens": 8, "output_tokens": 3}
-        assert decision["latency_s"] >= 0
 
 
 @pytest.mark.parametrize("error_name,status,code,retryable", [

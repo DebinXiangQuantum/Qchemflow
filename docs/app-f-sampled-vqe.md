@@ -1,5 +1,11 @@
 # APP F: Pauli measurement and deployable sampled VQE
 
+> **Status (2026-11-21).** This guide records a milestone built on ChemFlow's earlier
+> engine (IR programs, registry operators, static checker and orchestrator), which has
+> been removed. The science and the validation below still hold; signed tasks now run as
+> QCL screens, and the operations named here map to QCL primitives or plain kernels as
+> listed in [legacy-retirement.md](legacy-retirement.md).
+
 The existing molecular `ground_energy` operator and molecular target schema gain
 the `vqe_sampled` refinement; no new target kind is introduced. The opt-in `quantum`
 domain pack (included by `load_registry(pack_names())`) registers `vqe_shots_ideal`,

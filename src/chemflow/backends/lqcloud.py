@@ -16,9 +16,8 @@ from chemflow.backends.calibration import best_layout
 from chemflow.backends.circuits import build_circuit, compile_native, memory_to_index, to_lqcloud
 from chemflow.diagnostics import AdapterError
 from chemflow.ids import content_hash
-from chemflow.registry import ImplementationSpec
-from chemflow.runtime import ExecutionResult
-from chemflow.types import BackendKind, Samples
+from chemflow.runtime.result import ExecutionResult
+from chemflow.types import Samples
 
 logger = logging.getLogger(__name__)
 
@@ -346,11 +345,3 @@ class LqcloudBackend:
         return ExecutionResult(samples, device=device, cost=cost, job_ids=(job_id,),
                                diagnostics=diagnostics)
 
-
-def register_lqcloud(registry, backend: LqcloudBackend,
-                     identifier: str = "lqcloud_mq02") -> None:
-    backend.identifier = identifier
-    registry.register(ImplementationSpec(id=identifier, version="1", target="sample_configurations",
-        backend_kind=BackendKind.qpu, effects="random", adapter=backend.sample,
-        params=frozenset({"shots", "seed", "repetition"}),
-        resource_model=backend.prediction))

@@ -1,33 +1,34 @@
-from chemflow import Q, build
-from chemflow.ir.render import render
-from chemflow.ops.molecular import molecular_registry
-from chemflow.runtime import Executor
+"""H2 potential-energy curve: FCI, HF and CCSD at five bond lengths in one QCL plan."""
+
+import qcl
+
+RADII = (0.6, 0.8, 1.0, 1.4, 2.0)
+METHODS = ("fci", "hf", "ccsd")
 
 
-def main() -> None:
-    with build.program("h2_pes") as builder:
-        radius = builder.scan("R", Q([0.6, 0.8, 1.0, 1.4, 2.0], "angstrom"))
-        molecule = builder.molecule("H 0 0 0; H 0 0 {R}", params={"R": radius})
-        model = builder.electronic_model(basis="sto-3g")
-        hamiltonian = builder.hamiltonian(molecule, model)
-        sector = builder.sector(n_alpha=1, n_beta=1, n_orb=2)
-        results = []
-        for method in ("fci_pyscf", "hf", "ccsd"):
-            energy = builder.ground_energy(hamiltonian, sector)
-            builder.refine(energy, method)
-            builder.bind(energy, method)
-            results.append((method, energy.id))
-        builder.budget(qpu_shots=0)
-    program = builder.to_ir()
-    print(render(program))
-    print("R/angstrom | method | E/hartree | relation | evidence | wall_s")
-    for radius, point in zip(program.scans[0].values.value,
-                             Executor(molecular_registry()).run(program)["scan"]):
-        for method, node_id in results:
-            estimate = point[node_id]
-            print(f"{radius:.1f} | {method} | {estimate.value.value:.10f} | "
-                  f"{estimate.relation} | {estimate.evidence[0].status} | "
-                  f"{estimate.cost.wall_s:.4f}")
+@qcl.workflow
+def h2_pes(cpu):
+    rows = {}
+    for radius in RADII:
+        molecule = qcl.Molecule(f"H 0 0 0; H 0 0 {radius}", basis="sto-3g")
+        space = qcl.active_space(qcl.scf.hf(molecule).to(cpu), qcl.Active(2, 2)).to(cpu)
+        rows[f"{radius:.1f}"] = {
+            "fci": qcl.fci.solve(space.hamiltonian, space.sector).to(cpu).energy,
+            **{method: qcl.classical.solve(space.hamiltonian, space.sector,
+                                           method=method).to(cpu).energy
+               for method in METHODS[1:]}}
+    return rows
+
+
+def main() -> dict:
+    plan = h2_pes.compile(qcl.Cluster.local().cpus[0])
+    energies, relations = plan.run(), plan.relations()
+    print("R/angstrom | method | E/hartree | relation")
+    for radius, row in energies.items():
+        for method in METHODS:
+            print(f"{radius} | {method} | {row[method].value:.10f} | "
+                  f"{relations[radius][method]}")
+    return energies
 
 
 if __name__ == "__main__":

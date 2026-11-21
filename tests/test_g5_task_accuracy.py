@@ -8,9 +8,7 @@ from test_critic_answer import control
 from test_g5_evaluation import synthetic
 
 from chemflow.agent.critic import review
-from chemflow.agent.report import result_method
 from chemflow.eval.runner import EvaluationTask, load_suite, score_task
-from chemflow.ir.schema import Node, Program
 from chemflow.units import Q
 
 
@@ -87,17 +85,3 @@ def test_control_order_ignores_measured_costs_and_unknown_methods_sort_last():
                     control("triples", method="ccsd_t", cost={"wall_s": fast}),
                     control("a-unknown", cost={"wall_s": 0})]
         assert review([], controls).candidate == "ccsd"
-
-
-def test_method_metadata_for_primitive_and_composite_controls():
-    plan = Program(name="methods", nodes=[
-        Node(id="energy", op="ground_energy", refinement="ccsd"),
-        Node(id="thermo", op="thermochemistry"),
-        Node(id="reaction", op="reaction_energy", inputs={"species0": "energy", "thermo0": "thermo"}),
-        Node(id="component", op="component_energy", params={"method": "ccsd_t"}),
-        Node(id="interaction", op="interaction_energy", inputs={"component0": "component"}),
-    ])
-    assert result_method("energy", plan) == "ccsd"
-    assert result_method("reaction", plan) == "ccsd"
-    assert result_method("interaction", plan) == "ccsd_t"
-    assert result_method("thermo", plan) is None

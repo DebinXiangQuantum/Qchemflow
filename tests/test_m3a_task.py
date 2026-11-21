@@ -2,9 +2,6 @@ import pytest
 
 from chemflow.agent.task import TaskSpec, TaskStore
 from chemflow.diagnostics import AdapterError
-from chemflow.ir.schema import AcceptanceGate
-from chemflow.ops.molecular import molecular_registry
-from chemflow.runtime import Executor
 
 
 def spec():
@@ -37,35 +34,3 @@ def test_record_integrity_and_version():
         TaskStore("different").verify(record)
     successor = store.freeze(edited, "human", predecessor=record)
     assert successor.version == 2 and successor.predecessor_hash == record.hash
-
-
-def test_plan_targets_and_gates():
-    from chemflow.agent.orchestrator import Orchestrator
-
-    store = TaskStore("secret")
-    record = store.freeze(spec(), "human")
-    plan, _ = Orchestrator._base_plan(record, record.spec.target.active)
-    executor = Executor(molecular_registry())
-    assert executor.run_plan(plan, record, store)["gates"][-1].passed
-    plan.gates.append(AcceptanceGate(node=plan.targets[0], relation="equivalent"))
-    with pytest.raises(AdapterError, match="CF-E120"):
-        executor.run_plan(plan, record, store)
-    plan.gates.clear()
-    plan.targets = [plan.nodes[0].id]
-    with pytest.raises(AdapterError, match="CF-E120"):
-        executor.run_plan(plan, record, store)
-
-
-def test_missing_exact_reference_fails_gate():
-    from chemflow.agent.orchestrator import Orchestrator
-
-    store = TaskStore("secret")
-    record = store.freeze(spec(), "human")
-    plan, _ = Orchestrator._base_plan(record, record.spec.target.active)
-    plan.nodes[-1].params["s"] = 0
-    plan.nodes[-1].refinement = "sci"
-    plan.nodes[-1].binding = "sci_pyscf"
-    plan.nodes[-1].params["select_cutoff"] = 0.01
-    result = Executor(molecular_registry()).run_plan(plan, record, store)
-    assert not result["gates"][0].passed
-    assert "Missing exact reference" in result["gates"][0].reason

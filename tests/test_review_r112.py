@@ -23,11 +23,6 @@ from __future__ import annotations
 
 import json
 
-import test_review_m4a as m4a
-
-from chemflow.agent.journal import Journal
-from chemflow.agent.llm import FakeLLMClient, LLMPolicy
-
 
 def _error(code, retryable):
     return {"tool_calls": [], "content": "", "stop_reason": "error", "usage": {},
@@ -40,36 +35,6 @@ def _answer(text):
 
 def _states(path):
     return [json.loads(line)["state"] for line in path.read_text().splitlines()]
-
-
-def test_retryable_errors_are_retried_with_backoff(tmp_path, monkeypatch) -> None:
-    from chemflow.agent import llm
-
-    sleeps = []
-    monkeypatch.setattr(llm.time, "sleep", sleeps.append)
-    client = FakeLLMClient([_error("rate_limit", True), _error("rate_limit", True),
-                            _answer("final")])
-    journal = tmp_path / "j.jsonl"
-    result = LLMPolicy("designer", client, m4a._tools(), journal=Journal(journal),
-                       retry_backoff_s=2.0).decide({})
-    assert result["content"] == "final" and len(client.messages) == 3
-    assert sleeps == [2.0, 4.0]
-    assert _states(journal).count("LLM_ERROR") == 2 and "LLM_FAILED" not in _states(journal)
-
-
-def test_non_retryable_errors_stop_and_exhausted_retries_fail_loudly(tmp_path, monkeypatch) -> None:
-    from chemflow.agent import llm
-
-    monkeypatch.setattr(llm.time, "sleep", lambda seconds: None)
-    auth = FakeLLMClient([_error("authentication", False), _answer("never")])
-    journal = tmp_path / "auth.jsonl"
-    LLMPolicy("designer", auth, m4a._tools(), journal=Journal(journal)).decide({})
-    assert len(auth.messages) == 1 and "LLM_FAILED" in _states(journal)
-    limited = FakeLLMClient([_error("rate_limit", True)] * 10)
-    journal = tmp_path / "limited.jsonl"
-    LLMPolicy("designer", limited, m4a._tools(), journal=Journal(journal),
-              max_provider_attempts=3).decide({})
-    assert len(limited.messages) == 3 and "LLM_FAILED" in _states(journal)
 
 
 def test_the_harness_never_scores_llm_failures_as_policy_decisions() -> None:

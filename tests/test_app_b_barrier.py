@@ -1,14 +1,10 @@
 from argparse import Namespace
-from types import SimpleNamespace
 
 import pytest
 import yaml
-from pydantic import ValidationError
 
 from chemflow.agent.task import ReactionBarrierTarget, TaskSpec
-from chemflow.check import check
-from chemflow.domains import load_registry, pack_for_target
-from chemflow.domains.paths import base_plan, connected_ts, identity
+from chemflow.domains.paths import connected_ts
 from chemflow.eval.runner import run
 from chemflow.types import ElectronicModel
 
@@ -32,22 +28,6 @@ def barrier_spec():
         gates=[{"kind": "abs_error_vs_exact", "threshold": .1, "unit": "hartree"},
                {"kind": "relation_at_least", "relation": "approximate"}],
         budget={"wall_s": 1800}, allowed_effects=["pure"], decision="Choose a classical control")
-
-
-def test_barrier_signed_identity_requires_connection():
-    registry = load_registry(["paths"])
-    record = SimpleNamespace(spec=barrier_spec())
-    plan, _ = base_plan(record)
-    assert pack_for_target("reaction_barrier").name == "paths"
-    assert not check(plan, registry)
-    assert not identity(plan, record, {})
-    transition = next(node for node in plan.nodes if node.op == "connected_ts")
-    transition.op = "geometry_optimize"
-    transition.inputs.pop("reactant")
-    transition.inputs.pop("product")
-    assert identity(plan, record, {})
-    with pytest.raises(ValidationError):
-        ReactionBarrierTarget.model_validate({**barrier_target().model_dump(), "unknown": 1})
 
 
 def test_barrier_rejects_unconnected_irc(monkeypatch):

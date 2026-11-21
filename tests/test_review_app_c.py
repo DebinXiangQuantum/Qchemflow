@@ -44,11 +44,8 @@ Contract:
 """
 from __future__ import annotations
 
-import math
 from argparse import Namespace
 
-import numpy as np
-import pytest
 import yaml
 
 ETHANOL = ("C -0.0007 -0.0080 0.0000; C 1.5150 0.0107 0.0000; O 1.9668 1.3577 0.0000; "
@@ -58,37 +55,8 @@ METHANE = ("C 0 0 0; H 0.6276 0.6276 0.6276; H -0.6276 -0.6276 0.6276; "
            "H -0.6276 0.6276 -0.6276; H 0.6276 -0.6276 -0.6276")
 
 
-def _execute(builder_fn):
-    from chemflow import build
-    from chemflow.domains import load_registry, pack_names
-    from chemflow.runtime import Executor
-
-    with build.program("c") as builder:
-        node = builder_fn(builder)
-    return Executor(load_registry(pack_names())).run(builder.to_ir())[node.id]
-
-
 def _get(result, key):
     return result[key] if isinstance(result, dict) else getattr(result, key)
-
-
-def test_c1_bond_enumeration_with_symmetry_classes() -> None:
-    result = _execute(lambda b: b.node("enumerate_bonds", molecule=b.molecule(ETHANOL)))
-    bonds = _get(result, "bonds")
-    assert len(bonds) == 8
-    ch = [bond for bond in bonds if sorted(bond["elements"]) == ["C", "H"]]
-    assert len(ch) == 5 and len({bond["symmetry_class"] for bond in ch}) == 2
-    filtered = _get(_execute(lambda b: b.node("enumerate_bonds", molecule=b.molecule(ETHANOL),
-                                              elements="O-H")), "bonds")
-    assert [sorted(bond["atoms"]) for bond in filtered] == [[2, 8]]
-
-
-def test_c1_homolysis_gives_radical_fragments() -> None:
-    result = _execute(lambda b: b.node("homolysis", molecule=b.molecule(METHANE), atoms=[0, 1]))
-    fragments = _get(result, "fragments")
-    spins = sorted(fragment["spin"] for fragment in fragments)
-    assert spins == [1, 1]  # 2S: CH3 doublet + H doublet
-    assert sorted(len(fragment["atoms"].split(";")) for fragment in fragments) == [1, 4]
 
 
 def _fci(atoms, spin):
@@ -131,21 +99,6 @@ def test_c2_methane_ch_bde_through_the_agent(tmp_path) -> None:
     assert row["correct"] and row["completed"], row
 
 
-def test_c3_site_reactivity_reports_bde_sasa_and_the_formula() -> None:
-    result = _execute(lambda b: b.node(
-        "site_reactivity", molecule=b.molecule(ETHANOL), model=b.electronic_model(basis="sto-3g"),
-        level={"method": "hf", "functional": None, "dispersion": None}))
-    sites = _get(result, "sites")
-    hydrogens = [site for site in sites]
-    assert {site["atom"] for site in hydrogens} == {3, 4, 5, 6, 7}  # C-H hydrogens only
-    for site in hydrogens:
-        expected = site["sasa_fraction"] / (1 + math.exp((site["bde_kcal"] - 90) / 3))
-        assert site["score"] == pytest.approx(expected)
-    top = max(hydrogens, key=lambda site: site["score"])
-    assert _get(result, "top_site") == top["atom"]
-    assert _get(result, "evidence") == "empirical"
-
-
 def test_c4_isomer_ranking_through_the_agent(tmp_path) -> None:
     hcn, hnc = "C 0 0 0; N 0 0 1.16; H 0 0 -1.07", "C 0 0 0; N 0 0 1.17; H 0 0 2.17"
     energies = {"HCN": _fci(hcn, 0), "HNC": _fci(hnc, 0)}
@@ -156,29 +109,3 @@ def test_c4_isomer_ranking_through_the_agent(tmp_path) -> None:
     row = _run_single(tmp_path, _task("hcn-hnc-ranking", "ranking", target,
                                       {"ranking": order}))
     assert row["correct"], row
-
-
-def test_c4_boltzmann_weights() -> None:
-    energies = [0.0, 0.001, 0.003]
-    result = _execute(lambda b: b.node("boltzmann_weights", energies=energies,
-                                       temperature_K=298.15))
-    beta = 4.3597447222071e-18 / (1.380649e-23 * 298.15)
-    raw = np.exp(-beta * np.array(energies))
-    assert np.allclose(_get(result, "weights"), raw / raw.sum(), atol=1e-12)
-
-
-def test_c4_butane_conformer_search_finds_anti_first() -> None:
-    result = _execute(lambda b: b.node("conformer_search", molecule_smiles="CCCC",
-                                       level={"method": "gfn2", "functional": None,
-                                              "dispersion": None}, count=20, rmsd=0.3))
-    conformers = _get(result, "conformers")
-    assert len(conformers) >= 2
-    energies = [item["energy_hartree"] for item in conformers]
-    assert energies == sorted(energies)
-    points = np.array([[float(value) for value in atom.split()[1:]]
-                       for atom in conformers[0]["atoms"].split(";")])
-    b0, b1, b2 = points[0] - points[1], points[2] - points[1], points[3] - points[2]
-    b1 = b1 / np.linalg.norm(b1)
-    v, w = b0 - np.dot(b0, b1) * b1, b2 - np.dot(b2, b1) * b1
-    dihedral = abs(math.degrees(math.atan2(np.dot(np.cross(b1, v), w), np.dot(v, w))))
-    assert dihedral > 150  # anti is the lowest butane conformer

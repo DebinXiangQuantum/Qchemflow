@@ -255,13 +255,11 @@ def test_fake_llm_through_harness(tmp_path, monkeypatch, provider):
         def complete(self, messages, tools):
             self.calls += 1
             if messages[-1]["role"] == "tool":
-                assert json.loads(messages[-1]["content"])["result"]["data"]["plan_id"]
-                return {"content": "SCI plan ready", "tool_calls": []}
-            context = json.loads(messages[-1]["content"])
-            assert "plan.candidates" in {tool["name"] for tool in tools}
-            return {"content": "Screen SCI", "tool_calls": [{"name": "plan.candidates",
-                "arguments": {"plan_id": context["observation"]["base_plan_id"],
-                              "candidates": [{"template": "sci", "select_cutoff": 0.01}]}}]}
+                assert json.loads(messages[-1]["content"])["result"]["data"]["plan_hash"]
+                return {"content": "SCI submitted", "tool_calls": []}
+            assert "design.submit" in {tool["name"] for tool in tools}
+            return {"content": "Screen SCI", "tool_calls": [{"name": "design.submit",
+                "arguments": {"candidates": [{"template": "sci", "select_cutoff": 0.01}]}}]}
 
     def factory(provider, role, model):
         factory_calls.append((provider, role, model))

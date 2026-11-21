@@ -352,6 +352,18 @@ Every entry below is a compute operation unless marked *host* or *driver*.
 
 An engine that isn't installed is error `QCL-E401`. This corresponds to the catalogue's existing `CF-E080`.
 
+Domain operations (implemented; CPU):
+
+| Operation | Result | Relation |
+|---|---|---|
+| `qcl.qmmm.energy(pdb, positions_nm, qm_atoms, forcefields=, nonbonded=, basis=, method="rhf" \| "casci", cas=)` | electrostatic QM/MM total energy (OpenMM system, PySCF QM region) | RHF: variational upper bound; CASCI/FCI: equivalent within the QM/MM-CASCI model |
+| `qcl.embedding.ewf(H, sector, bath="full" \| "dmet" \| "bno", solver="fci" \| "ccsd")` | embedded wave-function energy over atomic (IAO) fragments of a full-space RHF molecule | full bath with FCI fragments: equivalent; otherwise approximate |
+| `qcl.drug.descriptors(ligands)`, `qcl.drug.filter(ligands, rules=)` | RDKit descriptors; Lipinski, PAINS and Brenk alerts (a `Record`) | none: a screen, not an estimate |
+| `qcl.synthesis.routes(target, stock=, iterations=, time_limit_s=)` | AiZynthFinder 4.4.1 routes in its isolated environment (a `Record`) | none |
+
+A `Record` holds `data` and `provenance`; it is returned from a plan but takes no part
+in estimate arithmetic or gates.
+
 ### 5.11 Post-processing (compute operations, usually placed on a CPU)
 
 - `qcl.thermo.rrho(geom, freqs, T, P=)`, `qcl.thermo.eyring(dG, T)`.
@@ -572,13 +584,12 @@ The recommended loop: write → compile and fix diagnostics → estimate → val
 ### 8.1a Signed tasks as screens (implemented)
 
 `chemflow agent run` executes a human-signed ChemFlow task by compiling it to QCL
-(`chemflow.agent.screen`, driver `chemflow.agent.qcl_run`). This is the default engine
-for the scripted policy. Live LLM policies run on QCL with `--engine qcl` (or
-`CHEMFLOW_ENGINE=qcl`); by default they keep the reviewed legacy designer protocol until
-the QCL roles below are signed off. `--engine legacy` selects the previous orchestrator
-(deprecated). `--builtin` (or `--device`) runs the task's single built-in QCL program
-instead of a screen, and `--program`/`--screen` run agent-authored QCL programs under the
-question checks of §8.1.
+(`chemflow.agent.screen`, driver `chemflow.agent.qcl_run`). QCL is the only engine: the
+scripted policy and live LLM policies both run screens (the earlier ChemFlow IR, its
+registry, static checker and orchestrator were removed; D24). `--builtin` (or `--device`)
+runs the task's single built-in QCL program instead of a screen, and `--program`/`--screen`
+run agent-authored QCL programs under the question checks of §8.1. `chemflow bench`
+compares QCL screens and primitives with independent oracles.
 
 - **One plan per round.** A screen is one workflow whose named outputs are the classical
   controls, the candidates and the exact in-model reference: for a ground energy,
@@ -631,8 +642,15 @@ question checks of §8.1.
   qcl`, plugin agent `plugin/agents/qcl.md`) gives external agents `task.get`,
   `methods.list`, `screen.review` and `screen.run`; runs share one budget ledger per task.
 
-On the three evaluation suites (79 tasks) the QCL engine gives the same answers and
-decisions as the legacy orchestrator: 79/79 correct.
+Before the earlier engine was removed, the QCL engine gave the same answers and
+decisions as its orchestrator on the three evaluation suites: 79/79 correct.
+
+**Workers.** Each plan runs in its own worker process. CPU plans are forked from a
+pre-warmed server (`qcl._zygote`) that has already imported NumPy, SciPy, PySCF and the
+ChemFlow kernels, which removes the interpreter start-up (about 0.65 s) from every plan
+while keeping per-plan processes, CPU limits, process groups and resource accounting.
+GPU plans and plans with pinned thread environments (`deterministic=True`) start a cold
+worker; `QCL_WARM_WORKER=0` disables the server.
 
 ### 8.2 Budgets (operator-controlled)
 
@@ -1268,7 +1286,9 @@ qcl/
 | D20 | Primitives are declared once in `primitives.toml`; the checker's coarse device availability, the graph builder's node types and the worker registry all derive from or are tested against it | Device availability was hand-copied across the frontend, checker and an 80-branch worker `if` chain; adding an operation touched five places that could silently disagree |
 | D21 | The compiler chooses *when* and *how many at once*, never *where*; lanes that do real work run in their own processes | Placement stays the program's decision (D3). Thread lanes in one process were no faster than sequential execution because the scientific libraries do much of their work in Python |
 | D22 | Target relations are inferred by the compiler from the primitive table, not asserted by results | A relation gate is part of the signed task's contract; deriving it from the program makes it checkable before execution and impossible for a result to overstate |
-| D23 | Signed tasks run as QCL screens by default; live LLM policies opt in with `--engine qcl` until the QCL roles are reviewed, and the legacy orchestrator remains for them meanwhile | One engine for every application, and the screen's controls, candidates and reference share work and overlap in one plan |
+| D23 | Signed tasks run as QCL screens | One engine for every application, and the screen's controls, candidates and reference share work and overlap in one plan |
+| D24 | The earlier ChemFlow engine (IR, registry, static checker, executor, formal verifier, orchestrator and its tools) is removed; its numerical kernels stay as plain functions that QCL implementations call, and its domain packs become QCL primitives (`qmmm.energy`, `embedding.ewf`, `drug.*`, `synthesis.routes`) | Two engines meant two sets of checks, relations and reports to keep consistent; QCL already states relations, budgets and placement in the compiled plan |
+| D25 | CPU plans fork from a pre-warmed worker server | Worker start-up dominated small screens (1–1.5 s per task against 0.1–0.5 s for the in-process legacy executor) |
 
 ---
 

@@ -3,8 +3,6 @@ from itertools import combinations
 import numpy as np
 import pytest
 
-from chemflow import build
-from chemflow.domains import load_registry
 from chemflow.domains.algorithms import (
     extend_subspace,
     full_subspace,
@@ -14,8 +12,6 @@ from chemflow.domains.algorithms import (
 )
 from chemflow.domains.dynamics import impurity_model
 from chemflow.impls.fci import matrix
-from chemflow.impls.sqd import sqd_sector
-from chemflow.runtime import Executor
 from chemflow.runtime.artifacts import ArtifactStore
 from chemflow.types import Samples, Sector, Spectrum, Subspace
 
@@ -103,28 +99,6 @@ def test_leading_roots_and_complete_resolution_have_explicit_shapes(model):
     assert store.get(spectrum.resolution_vectors_ref).shape == (36, 36)
 
 
-def test_prepare_sample_recover_ritz_reproduces_sqd_for_identical_settings():
-    with build.program("sqd-primitives") as builder:
-        ham = builder.node("impurity_model", **AIM)
-        sector = builder.sector(**SECTOR)
-        prep = builder.node("prepare_state", hamiltonian=ham, sector=sector,
-                            ansatz="lucj", init="ccsd")
-        samples = builder.node("sample_configurations", prep=prep, shots=20000, seed=7)
-        space = builder.node("subspace_from_samples", samples=samples, sector=sector, seed=7)
-        energy = builder.node("rayleigh_ritz", hamiltonian=ham, subspace=space, n_roots=1)
-    executor = Executor(load_registry(PACKS))
-    result = executor.run(builder.to_ir())
-    data = result[ham.id]
-    expected, diagnostics = sqd_sector(data, data.sector, executor.store, result[samples.id],
-                                      seed=7, n_batches=1, batch_size=20000, max_iter=1,
-                                      with_ext=False)
-    assert result[energy.id].energies[0] == pytest.approx(expected, abs=1e-10)
-    assert len(result[space.id].determinants) == diagnostics["subspace_dimension"]
-    assert samples.id in {item.node for item in result[energy.id].provenance.upstream}
-    assert result[energy.id].cost.sim_shots == 0
-    assert result["costs"][samples.id].sim_shots == 20000
-
-
 def test_configuration_recovery_corrects_particle_counts_and_is_reproducible():
     samples = Samples(counts={"0": 10, "255": 10}, shots=20, encoding_id="sector_state",
                       basis="computational", source="quantum_simulator", seed=7)
@@ -135,24 +109,3 @@ def test_configuration_recovery_corrects_particle_counts_and_is_reproducible():
     for counts in ({"0": -1}, {"256": 20}, {}):
         with pytest.raises(ValueError):
             subspace_from_samples(None, samples.model_copy(update={"counts": counts}), SECTOR)
-
-
-def test_ritz_full_coverage_is_equivalent_even_when_found_by_sampling():
-    store = ArtifactStore()
-    states = full_subspace(store, SECTOR).determinants
-    with build.program("full-via-samples") as builder:
-        ham = builder.node("impurity_model", **AIM)
-        sector = builder.sector(**SECTOR)
-        space = builder.node("full_subspace", sector=sector)
-        roots = builder.node("rayleigh_ritz", hamiltonian=ham, subspace=space)
-    executor = Executor(load_registry(PACKS), store)
-    result = executor.run(builder.to_ir())
-    assert result[roots.id].relation == "equivalent"
-    samples = Samples(counts={str(state): 1 for state in states}, shots=len(states),
-                      encoding_id="sector_state", basis="computational",
-                      source="quantum_simulator", seed=7)
-    recovered = subspace_from_samples(store, samples, SECTOR)
-    assert recovered.determinants == result[space.id].determinants
-    from chemflow.relations import ritz_relation
-
-    assert ritz_relation(recovered.coverage == 1) == "equivalent"

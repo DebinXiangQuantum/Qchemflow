@@ -452,6 +452,14 @@ class SiteScores:
 
 
 @dataclass(frozen=True)
+class Record:
+    """A structured, model-defined result (ligand alerts, descriptors, synthesis routes)."""
+
+    data: dict[str, Any]
+    provenance: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class GeometryResult:
     molecule: Molecule
     provenance: dict[str, Any]
@@ -1843,6 +1851,185 @@ class _Superconductivity:
 superconductivity = _Superconductivity()
 
 
+def _compile_error(source: str, message: str, hint: str, code: str = "QCL-E101") -> CompileError:
+    return CompileError([{"code": code, "source": source, "message": message, "hint": hint}])
+
+
+def _active(namespace: str) -> GraphBuilder:
+    graph = _active_graph.get()
+    if graph is None:
+        raise RuntimeError(f"Call qcl.{namespace} inside workflow compilation")
+    return graph
+
+
+QMMM_NONBONDED = ("NoCutoff", "CutoffNonPeriodic", "CutoffPeriodic", "PME", "Ewald", "LJPME")
+
+
+class _QMMM:
+    """Electrostatic QM/MM single points: an OpenMM system with a PySCF QM region."""
+
+    @staticmethod
+    def energy(pdb: str, positions_nm: Any, qm_atoms: Any, *,
+               forcefields: tuple[str, ...] = ("amber14/tip3p.xml",),
+               nonbonded: str = "NoCutoff", basis: str = "sto-3g", method: str = "rhf",
+               cas: tuple[int, int] | None = None, charge: int = 0, spin: int = 0) -> _Value:
+        """Total QM/MM energy (hartree) of one snapshot.
+
+        ``pdb`` is PDB text, ``positions_nm`` the snapshot coordinates in nm and
+        ``qm_atoms`` the QM region (whole molecules). ``method="rhf"`` is a variational
+        upper bound; ``method="casci", cas=(n_orbitals, n_electrons)`` with exact FCI is
+        equivalent within the QM/MM-CASCI model.
+        """
+        source = _source()
+        graph = _active("qmmm")
+        if not isinstance(pdb, str) or "\n" not in pdb:
+            raise _compile_error(source, "QM/MM needs PDB text", "Pass the PDB file contents")
+        try:
+            positions = [[float(value) for value in row] for row in positions_nm]
+        except (TypeError, ValueError) as error:
+            raise _compile_error(source, "QM/MM positions must be [x, y, z] rows in nm",
+                                 "Pass a snapshot of every atom") from error
+        if (not positions or any(len(row) != 3 or not all(math.isfinite(value) for value in row)
+                                 for row in positions)):
+            raise _compile_error(source, "QM/MM positions must be finite [x, y, z] rows in nm",
+                                 "Pass a snapshot of every atom")
+        region = list(qm_atoms) if isinstance(qm_atoms, (list, tuple)) else None
+        if (not region or len(set(region)) != len(region) or
+                any(type(index) is not int or not 0 <= index < len(positions)
+                    for index in region)):
+            raise _compile_error(source, "QM region must list unique atom indices",
+                                 "Select the QM molecules by atom index")
+        if (not isinstance(forcefields, (list, tuple)) or not forcefields or
+                not all(isinstance(name, str) and name for name in forcefields) or
+                nonbonded not in QMMM_NONBONDED):
+            raise _compile_error(source, "Invalid OpenMM force fields or nonbonded method",
+                                 "Use OpenMM force-field files and " + ", ".join(QMMM_NONBONDED))
+        if method not in ("rhf", "casci"):
+            raise _compile_error(source, f"Unknown QM/MM method {method!r}", "Use rhf or casci",
+                                 "QCL-E104")
+        if (method == "casci") != (cas is not None) or cas is not None and (
+                len(cas) != 2 or any(type(item) is not int or item < 1 for item in cas)):
+            raise _compile_error(source, "CASCI needs cas=(n_orbitals, n_electrons); RHF takes none",
+                                 "Give a positive active space for casci only")
+        if (not isinstance(basis, str) or not basis.strip() or type(charge) is not int or
+                type(spin) is not int or spin < 0):
+            raise _compile_error(source, "Invalid QM basis, charge or spin",
+                                 "Use a basis name and integer charge and 2S")
+        params = {"pdb": pdb, "positions_nm": positions, "qm_atoms": region,
+                  "forcefields": list(forcefields), "nonbonded": nonbonded, "basis": basis,
+                  "method": method, "cas": list(cas) if cas is not None else None,
+                  "charge": charge, "spin": spin}
+        node = graph.add_node("qmmm.energy", [], json.dumps(params, sort_keys=True), source)
+        return _Value(graph, node, "estimate", unit="hartree",
+                      family="QM/MM-" + ("RHF" if method == "rhf" else "CASCI"))
+
+
+qmmm = _QMMM()
+
+EWF_BATHS = ("full", "dmet", "bno")
+EWF_SOLVERS = ("fci", "ccsd")
+
+
+class _Embedding:
+    @staticmethod
+    def ewf(operator: _Value, sector: _Value, *, bath: str = "dmet", solver: str = "fci",
+            bath_tol: float = 1e-8, bno_eta: float = 1e-6) -> _Value:
+        """Embedded wave-function energy over atomic (IAO) fragments.
+
+        Needs the full orbital space of a closed-shell RHF molecule. The full bath with
+        an FCI fragment solver reproduces the exact energy; DMET and BNO baths truncate.
+        """
+        source = _source()
+        if (not isinstance(operator, _Value) or operator.kind != "fermion_operator" or
+                not isinstance(sector, _Value) or sector.kind != "sector"):
+            raise _compile_error(source, "embedding.ewf requires a FermionOperator and Sector",
+                                 "Use active.hamiltonian and active.sector")
+        if operator.graph is not sector.graph or operator.parent != sector.parent:
+            raise _compile_error(source, "EWF operator and sector refer to different spaces",
+                                 "Use both projections from the same active space", "QCL-E103")
+        if bath not in EWF_BATHS or solver not in EWF_SOLVERS:
+            raise _compile_error(source, f"Unknown EWF bath {bath!r} or solver {solver!r}",
+                                 f"Use bath in {EWF_BATHS} and solver in {EWF_SOLVERS}",
+                                 "QCL-E104")
+        if any(type(value) not in (int, float) or not math.isfinite(value) or value < 0
+               for value in (bath_tol, bno_eta)):
+            raise _compile_error(source, "EWF thresholds must be finite and nonnegative",
+                                 "Use bath_tol and bno_eta >= 0")
+        graph = operator.graph
+        params = {"bath": bath, "solver": solver, "scheme": f"{bath}/{solver}",
+                  "bath_tol": float(bath_tol), "bno_eta": float(bno_eta)}
+        node = graph.add_node("embedding.ewf", [operator.node_id, sector.node_id],
+                              json.dumps(params, sort_keys=True), source)
+        return _Value(graph, node, "estimate", operator.molecule, unit="hartree",
+                      family=f"EWF({bath}/{solver.upper()})")
+
+
+embedding = _Embedding()
+
+DRUG_RULES = ("lipinski", "pains", "brenk")
+
+
+def _ligands(ligands: Any, source: str) -> dict[str, str]:
+    if (not isinstance(ligands, dict) or not ligands or
+            not all(isinstance(name, str) and name and isinstance(smiles, str) and smiles
+                    for name, smiles in ligands.items())):
+        raise _compile_error(source, "Ligands must be a {name: SMILES} mapping",
+                             "Name every ligand and give its SMILES")
+    return dict(sorted(ligands.items()))
+
+
+class _Drug:
+    """RDKit ligand screens: descriptors and rule-based alerts, not assay outcomes."""
+
+    @staticmethod
+    def descriptors(ligands: dict[str, str]) -> _Value:
+        source = _source()
+        graph = _active("drug")
+        node = graph.add_node("drug.descriptors", [],
+                              json.dumps({"ligands": _ligands(ligands, source)}), source)
+        return _Value(graph, node, "record")
+
+    @staticmethod
+    def filter(ligands: dict[str, str], rules: tuple[str, ...] = ("lipinski", "pains")
+               ) -> _Value:
+        """Flag ligands that break Lipinski cutoffs or match PAINS/Brenk alerts."""
+        source = _source()
+        graph = _active("drug")
+        chosen = sorted(set(rules)) if isinstance(rules, (list, tuple)) else []
+        if not chosen or set(chosen) - set(DRUG_RULES):
+            raise _compile_error(source, "Ligand filter rules must be lipinski, pains or brenk",
+                                 "Choose one or more of " + ", ".join(DRUG_RULES))
+        node = graph.add_node("drug.filter", [], json.dumps(
+            {"ligands": _ligands(ligands, source), "rules": chosen}), source)
+        return _Value(graph, node, "record")
+
+
+drug = _Drug()
+
+
+class _Synthesis:
+    @staticmethod
+    def routes(target: str, *, stock: str = "zinc", iterations: int = 100,
+               time_limit_s: float = 120) -> _Value:
+        """Retrosynthesis routes from AiZynthFinder 4.4.1 in its isolated environment."""
+        source = _source()
+        graph = _active("synthesis")
+        if (not isinstance(target, str) or not target.strip() or
+                not isinstance(stock, str) or not stock or
+                type(iterations) is not int or iterations < 1 or
+                type(time_limit_s) not in (int, float) or not math.isfinite(time_limit_s) or
+                time_limit_s <= 0):
+            raise _compile_error(source, "Invalid retrosynthesis search",
+                                 "Give target SMILES, stock, iterations >= 1 and a time limit")
+        params = {"target": target, "stock": stock, "iterations": iterations,
+                  "time_limit_s": float(time_limit_s)}
+        node = graph.add_node("synthesis.routes", [], json.dumps(params), source)
+        return _Value(graph, node, "record")
+
+
+synthesis = _Synthesis()
+
+
 class _RDKit:
     @staticmethod
     def embed(smiles: str, *, n: int = 20, seed: int = 42,
@@ -3093,7 +3280,8 @@ def _output_spec(value: Any) -> Any:
                               "tensor", "hessian", "eigensystem", "svd_result",
                               "spectral_estimate",
                               "qubit_operator",
-                              "reaction_path", "frequencies", "site_scores", "lucj_params"):
+                              "reaction_path", "frequencies", "site_scores", "lucj_params",
+                              "record"):
             raise TypeError("This QCL result cannot yet be returned from a worker")
         return {"type": "node", "id": value.node_id}
     if isinstance(value, tuple):
@@ -3203,6 +3391,8 @@ class Plan:
                 return Comparison(result["relation"], result["difference"],
                                   result["combined_sigma"], result["unit"],
                                   result["provenance"])
+            if output.kind == "record":
+                return Record(result["data"], result["provenance"])
             if output.kind == "site_scores":
                 return SiteScores(tuple(result["sites"]), result["top_site"],
                                   result["evidence"], result["provenance"])
@@ -3460,7 +3650,11 @@ class Plan:
                                                       if node["op"] in ("dft.rks", "dft.uks") and
                                                       node["params"].get("solvent") else
                                                       f"{node['op']}/chemflow-rdkit"
-                                                      if node["op"].startswith("rdkit.") else
+                                                      if node["op"].startswith(("rdkit.", "drug.")) else
+                                                      "qmmm.energy/chemflow-openmm-pyscf"
+                                                      if node["op"] == "qmmm.energy" else
+                                                      "synthesis.routes/aizynthfinder-4.4.1"
+                                                      if node["op"] == "synthesis.routes" else
                                                       f"{node['op']}/chemflow-pyscf"),
                                    "source": node["source"]})
                 for input_id in node["inputs"]:
@@ -3958,25 +4152,43 @@ class Plan:
             worker_env = {**(worker_env or os.environ), **dict.fromkeys((
                 "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
                 "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"), "1")}
-        before = resource.getrusage(resource.RUSAGE_CHILDREN)
-        try:
-            process = subprocess.run(
-                [sys.executable, "-m", "qcl._worker"],
-                input=json.dumps({"graph": worker_graph,
-                                  "output": output,
-                                  "cloud_qpu_policy": cloud_qpu_policy,
-                                  "cpu_core_s": cpu_core_s,
-                                  "deterministic": self._deterministic,
-                                  "schedule": compiled}),
-                text=True, capture_output=True, check=False, timeout=timeout_s,
-                env=worker_env,
-            )
-        except subprocess.TimeoutExpired as error:
-            raise RuntimeError("QCL-E503: worker exceeded the wall-time limit") from error
-        finally:
-            after = resource.getrusage(resource.RUSAGE_CHILDREN)
-            self.cpu_core_s = max(0.0, after.ru_utime + after.ru_stime -
-                                  before.ru_utime - before.ru_stime)
+        payload = json.dumps({"graph": worker_graph,
+                              "output": output,
+                              "cloud_qpu_policy": cloud_qpu_policy,
+                              "cpu_core_s": cpu_core_s,
+                              "deterministic": self._deterministic,
+                              "schedule": compiled})
+        # A pre-warmed fork server runs CPU plans in the caller's environment (qcl._zygote);
+        # GPU plans and pinned environments start a cold worker.
+        warm = None
+        if worker_env is None and not any(
+                (node.get("device") or {}).get("kind") == "gpu" or
+                ((node.get("device") or {}).get("simulator_host") or "").startswith("gpu")
+                for node in worker_graph["nodes"]):
+            from qcl import _zygote
+
+            warm = _zygote.run(payload, timeout_s)
+        if warm is not None:
+            self.cpu_core_s = max(0.0, warm["cpu_s"])
+            if warm["timed_out"]:
+                raise RuntimeError("QCL-E503: worker exceeded the wall-time limit")
+            process = subprocess.CompletedProcess(
+                [sys.executable, "-m", "qcl._worker"], warm["returncode"],
+                warm["stdout"], warm["stderr"])
+        else:
+            before = resource.getrusage(resource.RUSAGE_CHILDREN)
+            try:
+                process = subprocess.run(
+                    [sys.executable, "-m", "qcl._worker"], input=payload,
+                    text=True, capture_output=True, check=False, timeout=timeout_s,
+                    env=worker_env,
+                )
+            except subprocess.TimeoutExpired as error:
+                raise RuntimeError("QCL-E503: worker exceeded the wall-time limit") from error
+            finally:
+                after = resource.getrusage(resource.RUSAGE_CHILDREN)
+                self.cpu_core_s = max(0.0, after.ru_utime + after.ru_stime -
+                                      before.ru_utime - before.ru_stime)
         if process.returncode:
             if cpu_core_s is not None and (
                     "CPU core-time limit" in process.stderr or
@@ -4026,6 +4238,10 @@ class Workflow:
             raise TypeError("deterministic must be a boolean")
         if budget is not None and not isinstance(budget, Budget):
             raise TypeError("budget must be a qcl.Budget")
+        # Plans usually run right after compiling: let the worker server import meanwhile.
+        from qcl import _zygote
+
+        _zygote.prestart()
         graph = GraphBuilder()
         token = _active_graph.set(graph)
         patterns: list[_Map | _Scan | _PESOptimize | _Iterate] = []

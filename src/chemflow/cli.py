@@ -14,9 +14,9 @@ from pathlib import Path
 import yaml
 
 from chemflow.agent.llm import DEFAULT_MAX_TURNS
+from chemflow.agent.qcl_tools import DESCRIPTIONS
 from chemflow.agent.task import TaskSpec
-from chemflow.agent.tools import DESCRIPTIONS
-from chemflow.mcp import PROFILES, QCL_PROFILE, create_tools
+from chemflow.mcp import PROFILES, QCL_PROFILE, ROLE, create_tools
 from chemflow.plugin_build import TARGETS, build
 from chemflow.signing import TaskSigner, TaskVerifier, generate_keypair
 
@@ -50,10 +50,6 @@ def main() -> None:
     agent_run.add_argument("--public-key", type=Path, required=True)
     agent_run.add_argument("--out", type=Path, required=True)
     agent_run.add_argument("--program", type=Path)
-    agent_run.add_argument("--engine", choices=("auto", "qcl", "legacy"), default="auto",
-                           help="auto: QCL screens for the scripted policy, the legacy "
-                                "orchestrator for live LLM policies (or CHEMFLOW_ENGINE); "
-                                "qcl: QCL screens for every policy; legacy: deprecated")
     agent_run.add_argument("--device",
                            help="run the task's single built-in QCL program on this device")
     agent_run.add_argument("--builtin", action="store_true",
@@ -91,7 +87,6 @@ def main() -> None:
     evaluation_run.add_argument("--roles", default="designer")
     evaluation_run.add_argument("--max-turns", type=int, default=DEFAULT_MAX_TURNS,
                                 help="Maximum model calls per LLM role turn (default: 24)")
-    evaluation_run.add_argument("--engine", choices=("auto", "qcl", "legacy"), default="auto")
     evaluation_run.add_argument("--tasks")
     evaluation_run.add_argument("--jobs", type=int, default=1,
                                 help="Number of independent task worker processes (default: 1)")
@@ -113,13 +108,12 @@ def main() -> None:
     calls = tool.add_subparsers(dest="action", required=True,
                                 parser_class=partial(argparse.ArgumentParser, allow_abbrev=False))
     call = calls.add_parser("call")
-    call.add_argument("--profile", choices=(*PROFILES, QCL_PROFILE), required=True)
+    call.add_argument("--profile", choices=PROFILES, default=QCL_PROFILE)
     call.add_argument("--task", required=True)
     call.add_argument("--public-key", required=True)
     call.add_argument("--key-fingerprint", required=True)
     call.add_argument("--name", required=True)
     call.add_argument("--args-json", required=True)
-    call.add_argument("--packs", default="molecular")
     plugin = commands.add_parser("plugin")
     builds = plugin.add_subparsers(dest="action", required=True,
                                    parser_class=partial(argparse.ArgumentParser, allow_abbrev=False))
@@ -129,15 +123,8 @@ def main() -> None:
     package.add_argument("--public-key", type=Path, required=True)
     package.add_argument("--task", type=Path)
     package.add_argument("--profiles")
-    package.add_argument("--packs")
     package.add_argument("--server-command", type=Path)
     package.add_argument("--hook-command", type=Path)
-    plan = commands.add_parser("plan")
-    plan_commands = plan.add_subparsers(dest="action", required=True)
-    show = plan_commands.add_parser("show")
-    show.add_argument("--plan-id", required=True)
-    show.add_argument("--plan-dir", type=Path, required=True)
-    show.add_argument("--qpu", choices=("MQ02",))
     journal = commands.add_parser("journal")
     journal.add_argument("action", choices=("show",))
     journal.add_argument("path")
@@ -183,13 +170,17 @@ def main() -> None:
 
                 run(args)
         elif args.command == "bench":
-            from chemflow.domains.benchmarks import list_benchmarks, run_benchmark
+            from chemflow.bench import list_benchmarks, run_benchmark
 
             if args.action == "list":
                 for pack, name in list_benchmarks():
                     print(f"{pack} {name}")
             else:
-                report = run_benchmark(args.pack, args.name)
+                try:
+                    report = run_benchmark(args.pack, args.name)
+                except RuntimeError as error:
+                    print(f"ChemFlow benchmark failed: {error}", file=sys.stderr)
+                    raise SystemExit(2) from None
                 text = json.dumps(report, indent=2)
                 if args.json_out:
                     args.json_out.write_text(text + "\n")
@@ -217,29 +208,17 @@ def main() -> None:
                     pointer.write_text(record.model_dump_json(indent=2) + "\n")
         elif args.command == "tool":
             tools = create_tools(args.profile, args.task, public_key=args.public_key,
-                                 key_fingerprint=args.key_fingerprint, packs=args.packs)
-            from chemflow.agent.qcl_tools import DESCRIPTIONS as QCL_DESCRIPTIONS
-
-            names = QCL_DESCRIPTIONS if args.profile == QCL_PROFILE else DESCRIPTIONS
-            name = next((candidate for candidate in names
+                                 key_fingerprint=args.key_fingerprint)
+            name = next((candidate for candidate in DESCRIPTIONS
                          if candidate.replace(".", "_") == args.name), args.name)
             arguments = json.loads(args.args_json)
             if not isinstance(arguments, dict):
                 raise ValueError("Tool arguments must be a JSON object")
-            role = ("orchestrator" if args.profile in ("full", QCL_PROFILE) else
-                    args.profile)
-            if args.profile == "full":
-                role = next((candidate for candidate in PROFILES[:-1]
-                             if name in {item["name"] for item in tools.schemas(candidate)}), role)
-            print(json.dumps(tools.call(role, name, arguments)))
+            print(json.dumps(tools.call(ROLE, name, arguments)))
         elif args.command == "plugin":
             build(args.target, args.out, args.public_key, task=args.task,
                   profiles=args.profiles, server_command=args.server_command,
-                  hook_command=args.hook_command, packs=args.packs)
-        elif args.command == "plan":
-            from chemflow.plan_view import show_stored_plan
-
-            print(show_stored_plan(args.plan_id, args.plan_dir, args.qpu))
+                  hook_command=args.hook_command)
         elif args.command == "qpu":
             from chemflow.backends.lqcloud import LqcloudBackend
 

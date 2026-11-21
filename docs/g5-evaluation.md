@@ -2,9 +2,9 @@
 
 G5 measures **ChemFlow agent runs**, not isolated operator benchmarks. Every
 task is signed and passed directly to `chemflow.agent.cli.run`, the same entry
-point as `chemflow agent run`. This includes the orchestrator, controls,
-candidate design, checking, screening, critic, reporting, journal and budget
-ledger. The harness does not substitute its own chemistry execution pipeline.
+point as `chemflow agent run`. This includes the QCL screens (controls,
+candidates and exact reference), candidate design, critic, reporting, journal and
+budget ledger. The harness does not substitute its own chemistry execution pipeline.
 
 ## Offline scripted baseline
 
@@ -207,10 +207,10 @@ timing budgets are close enough to be exhausted under load.
 ### Refusal interpretation
 
 Wall/CPU-zero tasks cannot begin numerical execution. The effect task permits
-no effects, so even the first pure node is denied at runtime with CF-E120.
-Only the executor's structured effect-denial exception is recorded as an
-expected refusal: other CF-E120 errors (bad signatures/target identities) are
-still failures. The expected denial remains visible as an integrity event.
+no effects, so the screen is refused with CF-E120 before any plan runs. Only that
+structured effect refusal is recorded as an expected refusal: other CF-E120 errors
+(bad signatures/target identities) are still failures. The expected denial remains
+visible as an integrity event.
 
 **Shot-budget limitation:** no nonnegative shot budget can rule out *every*
 current candidate, because SCI uses zero shots. The 2048-shot task instead
@@ -298,36 +298,25 @@ existing totals; control fallback correctness is not candidate success.
 
 ### Designer protocol
 
-The designer starts from `observation.base_plan_id`, preserving its frozen controls,
-screening reference and gates. `plan.candidates` supports `sci`, `sqd` and `vqe` for
-`ground_energy` references, and for `reaction_energy` references by applying the
-recipe to each ground-energy species. Other reference operators are rejected with
-a named `ValueError`; composition with `plan.add_node` remains available, with
-`target=true` on candidate results.
+The designer reads `observation.controls`: the graded classical controls and exact
+reference of the first screening round, which it cannot change. `methods.list` gives
+the candidate templates and their ranges, and `screen.review {candidates}` compiles a
+proposal into the next round's QCL plan without running it, reporting the inferred
+relation of each output, the predicted time and the simulator shots. Candidates are
+typed: `sci {select_cutoff}` (1e-8 to 0.1) and `sqd {shots}` (1 to 1 000 000;
+closed-shell species only), at most eight distinct ones. They apply to ground-energy
+targets and componentwise to reaction energies, barriers, rankings, scans, bond
+dissociation and IP/EA species. SQD keeps `seed=11`, `n_batches=2`, `max_iter=2` and
+LUCJ preparation from CCSD amplitudes. These are screening recipes, not accuracy
+guarantees; the signed gates and budget still apply.
 
-Omitted or null SCI `select_cutoff` defaults to `0.01`; omitted or null SQD `shots`
-defaults to `1024`, matching the scripted designer's first choices. SQD retains
-`seed=11`, `n_batches=2`, `max_iter=2` and LUCJ preparation. VQE retains LUCJ,
-`n_starts=2`, `maxiter=20`, `seed=11`. These are screening recipes, not accuracy
-guarantees; the frozen task's gates and budget still apply.
-
-After optional `check` and a `run` at `scale=screen`, the designer finishes with
-`design.submit {plan_id}` or `design.decline {reason}`. Either stops immediately,
-including any later calls in the same response, once the tool succeeds.
-Submission validates the run's base plan before ending the turn: base nodes must
-remain a prefix, references and existing targets must be preserved, gates must be
-absent, and at least one new target must exist. Plans started from `plan.new` are
-refused; build on `observation.base_plan_id`. An invalid submission returns a
-structured error naming that base handle, allowing correction in the next turn.
-The orchestrator independently retains its frozen-controls check before screening.
-A decline records `DESIGN_DECLINED`
-and falls back to controls without a refusal. Without either terminal tool, the
-latest successful `plan.candidates`, `plan.add_node`, `plan.refine`, `plan.bind` or
-`plan.remove_node` result supplies the plan to screen. Every screened plan must
-preserve the frozen controls and reference. If nothing was built, `DESIGN_REFUSED`
-names that and the ending: text reply, consecutive tool errors, turn limit or
-`LLM_FAILED`. Candidate-path ChemFlow check/adapter errors refuse the design rather
-than the task; unexpected programming errors still reach the evaluation error row.
+The designer finishes with `design.submit {candidates}` or `design.decline {reason}`.
+Either stops the turn immediately, including any later calls in the same response.
+Submitted candidates are validated again by the trusted screen builder; an invalid
+proposal records `DESIGN_REFUSED` with the reason and the run keeps the controls. A
+decline records `DESIGN_DECLINED`. Without either terminal tool, `DESIGN_REFUSED` names
+the ending: text reply, consecutive tool errors, turn limit or `LLM_FAILED`. No agent
+output is executed as code: the builder turns typed candidates into one more QCL plan.
 
 Model-facing parameter schemas inline local definitions and references while
 retaining closed objects and required nullable fields. Object/array argument fields
@@ -339,13 +328,12 @@ journal preserves the original arguments, not the decoded copy.
 
 Declared molecular active spaces, spaces derived from lattice/spectral sectors or
 reaction species, and full-molecular-space tasks do not consult the LLM modeler.
-`MODEL` records the orchestrator's fixed choice and its reason, with no modeler provider call.
+`MODEL` records the fixed choice and its reason, with no modeler provider call.
 For `active: auto`, the modeler calls `model.choose {n_elec, n_orb, reason}`. This
-modeler-only tool ends the turn immediately; the orchestrator checks positive
+modeler-only tool ends the turn immediately; the driver checks positive
 integer counts, the 10-orbital screening cap, electron capacity and spin parity.
 Without a choice, or with an infeasible choice, it uses the diagnostics'
-`suggested_active`, records `MODEL_FALLBACK` with a reason, and sets `fallback: true`
-in `CONTROLS`. The diagnostic fallback must itself pass the feasibility checks.
+`suggested_active` and records `MODEL_FALLBACK` with a reason. The diagnostic fallback must itself pass the feasibility checks.
 Free text is never parsed as a model choice.
 
 Planner prose is advisory: the original task still goes to the human approver.
@@ -360,8 +348,8 @@ Raw `correct`, `reference_correct`, other diagnostic totals and resource costs
 are retained for auditing, not for attributing fallback decisions to an LLM.
 
 For `expected.outcome: refused`, `refusal_code` is mandatory; numeric reference
-fields are optional. The budget task sets wall time to zero, causing executor
-preflight to raise CF-E070 without executing any node. The existing error gains
+fields are optional. The budget task sets wall time to zero, so the screen's
+budget preflight raises CF-E070 without executing any node. The existing error gains
 `nothing_consumed=True` metadata; execution/selection behavior is unchanged.
 The agent writes a structured `REFUSED` journal entry and summary with node,
 code, no-consumption evidence and a resource snapshot, then retains its nonzero
@@ -490,12 +478,9 @@ Before each of their last two model calls, roles with terminal tools receive a
 reminder counting the remaining turns including that call and naming their terminal
 tools (`design.submit`/`design.decline` or `model.choose`). Other roles receive no reminder.
 
-`design.decline {reason, plan_id: null}` keeps the controls-only behavior. With a
-`plan_id`, ChemFlow uses the executor's preflight against the remaining task ledger,
-without executing the plan. An unaffordable plan ends the run as CF-E070 with
-`nothing_consumed: true`, the spent snapshot and refused node; the journal records
-the plan hash. A plan that fits produces a structured tool error and lets the
-designer continue rather than accepting an unsupported budget claim.
+`design.decline {reason}` keeps the controls-only behavior. Every screen is checked
+against the remaining signed budget before it runs: a round whose simulator shots or
+predicted wall time exceed it ends the run as CF-E070 with `nothing_consumed: true`.
 
 ## Adding tasks
 

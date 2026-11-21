@@ -11,8 +11,6 @@ from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from test_m3a_task import spec
 
-from chemflow.agent.tools import DESCRIPTIONS
-from chemflow.mcp import create_server
 from chemflow.plugin_build import SOURCE, TARGETS, _tools, build
 from chemflow.signing import TaskSigner, TaskVerifier, generate_keypair
 
@@ -70,7 +68,7 @@ def test_manifests_skills_and_servers(packages):
     assert agent["$schema"] == "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
     mcp = json.loads((outputs["agent-plugins"] / "mcp.json").read_text())
     assert mcp["$schema"] == "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
-    assert mcp["mcpServers"]["chemflow-designer"]["type"] == "stdio"
+    assert mcp["mcpServers"]["chemflow-qcl"]["type"] == "stdio"
     codex = json.loads((outputs["codex"] / "plugins/chemflow/plugin.json").read_text())
     assert codex["extensions"]["com.openai"]["interface"]["displayName"] == "ChemFlow"
     marketplace = json.loads((outputs["codex"] / ".agents/plugins/marketplace.json").read_text())
@@ -79,33 +77,10 @@ def test_manifests_skills_and_servers(packages):
     assert "AGENTS.md" in (outputs["goose"] / ".goosehints").read_text()
 
 
-def test_claude_allowlist_and_pi(packages):
-    outputs, key, task, fingerprint = packages
-    claude = outputs["claude-code"]
-    assert not (claude / "CLAUDE.md").exists()
-    for role in ("planner", "modeler", "designer", "critic", "analyst"):
-        content = (claude / "agents" / f"{role}.md").read_text()
-        metadata = yaml.safe_load(content.split("---", 2)[1])
-        assert metadata["tools"] == [f"mcp__plugin_chemflow_chemflow-{role}__{tool}"
-                                     for tool in _tools(role)]
-        assert all(len(name) <= 64 for name in metadata["tools"])
-        server = create_server(role, str(task), public_key=str(key), key_fingerprint=fingerprint)
-        assert {item.name for item in server._tool_manager.list_tools()} == (
-            set(_tools(role)) - {"algorithm_verify", "algorithm_register", "algorithm_validity"})
-    pi = outputs["pi"]
-    assert json.loads((pi / "package.json").read_text())["pi"] == {
-        "extensions": ["extensions/chemflow.ts"], "skills": ["skills"]}
-    extension = (pi / "extensions/chemflow.ts").read_text()
-    for name in _tools("designer"):
-        assert f"name: '{name}'" in extension
-        assert next(tool for tool in DESCRIPTIONS if tool.replace(".", "_") == name) in extension
-    assert "pi.on('tool_call'" in extension and "block: true" in extension
-
-
 def test_hooks_and_hermes_register(packages):
     outputs, _, _, _ = packages
-    payload = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "run",
-                          "tool_input": {"scale": "production"}})
+    payload = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "screen_run",
+                          "tool_input": {}})
     for target in ("agent-plugins", "codex", "claude-code", "goose"):
         path = (outputs[target] / ".agents/plugins/chemflow/hooks/hooks.json" if target == "goose"
                 else outputs[target] / "plugins/chemflow/hooks/hooks.json" if target == "codex"
@@ -144,7 +119,7 @@ def test_hooks_and_hermes_register(packages):
 
 def test_stdio_mcp_lists_profile(packages):
     outputs, _, _, _ = packages
-    entry = _servers("agent-plugins", outputs["agent-plugins"])["chemflow-designer"]
+    entry = _servers("agent-plugins", outputs["agent-plugins"])["chemflow-qcl"]
 
     async def exercise():
         parameters = StdioServerParameters(command=entry["command"], args=entry["args"],
@@ -153,8 +128,6 @@ def test_stdio_mcp_lists_profile(packages):
                     ClientSession(reader, writer) as session):
             await session.initialize()
             listed = await session.list_tools()
-            assert {tool.name for tool in listed.tools} == (
-                set(_tools("designer")) - {
-                    "algorithm_verify", "algorithm_register", "algorithm_validity"})
+            assert {tool.name for tool in listed.tools} == set(_tools("qcl"))
 
     asyncio.run(exercise())

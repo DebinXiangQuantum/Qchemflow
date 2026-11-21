@@ -14,8 +14,6 @@ from chemflow.cache import cache_dir
 from chemflow.diagnostics import AdapterError
 from chemflow.types import Provenance
 
-from ._adapters import register_adapter
-
 DEFAULT_HOME = str(cache_dir() / "aizynthfinder")
 
 
@@ -107,10 +105,3 @@ def search_routes(store, target, stock="zinc", iterations=100, time_limit_s=120,
         inventory={"stock": stock, "sha256": inventory_hash},
         provenance=Provenance(impl_id="search_routes", impl_version="1", backend_kind="cpu_numeric",
             device="aizynthfinder:4.4.1", software_versions={"aizynthfinder": "4.4.1"}))
-
-
-def register(registry):
-    register_adapter(registry, "search_routes", search_routes, {}, "route_candidates",
-        ("target", "stock", "iterations", "time_limit_s", "seed"),
-        "Isolated AiZynthFinder MCTS routes, stock membership and inventory SHA-256; no energies",
-        effects="random")

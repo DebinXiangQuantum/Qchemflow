@@ -1,42 +1,10 @@
-import asyncio
 import json
 from argparse import Namespace
 
 import pytest
 
-from chemflow.agent.task import TaskSpec
 from chemflow.apps import draft
 from chemflow.eval.runner import EvaluationTask, score_task
-from chemflow.signing import TaskSigner, generate_keypair
-
-
-def test_mcp_drafts_are_planner_only_and_unsigned(tmp_path):
-    pytest.importorskip("mcp")
-    from chemflow.mcp import create_server
-
-    private, public = generate_keypair(b"test-human")
-    key = tmp_path / "public.pem"
-    key.write_bytes(public)
-    task = tmp_path / "task.json"
-    task.write_text(TaskSigner(private, b"test-human").freeze(
-        TaskSpec.model_validate(draft("ground_state_energy", example=True)[0]),
-        "human-test-fixture").model_dump_json())
-
-    async def exercise():
-        planner = create_server("planner", str(task), public_key=str(key))
-        names = {tool.name for tool in await planner.list_tools()}
-        assert {"app_list", "app_draft"} <= names
-        result = await planner.call_tool("app_draft", {"app_id": "frontier_orbitals",
-            "inputs": None, "parameters": '{"physical_gap": true}', "example": True})
-        drafts = json.loads(result.content[0].text)["data"]
-        assert len(drafts) == 5
-        assert "signature" not in json.dumps(drafts)
-        for item in drafts:
-            TaskSpec.model_validate(item)
-        designer = create_server("designer", str(task), public_key=str(key))
-        assert "app_draft" not in {tool.name for tool in await designer.list_tools()}
-
-    asyncio.run(exercise())
 
 
 def test_metabolic_scoring_checks_each_site():
@@ -86,17 +54,3 @@ def test_missing_binding_environment_is_a_structured_refusal(tmp_path, monkeypat
     assert result["rows"][0]["decision"] == "refused"
     summary = json.loads((tmp_path / "output/binding/summary.json").read_text())
     assert summary["refusal"]["code"] == "CF-E080"
-
-
-def test_optional_rate_is_reported_from_verified_gibbs_barrier(tmp_path):
-    from chemflow.agent.orchestrator import Orchestrator
-    from chemflow.agent.task import TaskStore
-
-    spec = TaskSpec.model_validate(draft("reaction_barrier", parameters={"rate_constant": True},
-                                        example=True)[0])
-    store = TaskStore("test-human-only")
-    agent = Orchestrator(store, lambda task: store.freeze(task, "human-test-fixture"), tmp_path,
-                         max_rounds=0)
-    result = agent.run(spec)
-    assert "model Eyring k=" in result.report
-    assert all(item["rate_constant"]["k_per_s"] > 0 for item in result.results)

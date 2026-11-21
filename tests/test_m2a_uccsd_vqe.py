@@ -3,8 +3,6 @@ import pytest
 from chemflow.impls.pyscf_impls import build_molecule, fci_pyscf
 from chemflow.impls.sector import SectorEngine
 from chemflow.impls.vqe import vqe
-from chemflow.ops.molecular import molecular_registry
-from chemflow.relations import TargetRelation
 from chemflow.runtime.artifacts import ArtifactStore
 from chemflow.types import ActiveSpaceSpec, ElectronicModel
 
@@ -22,9 +20,3 @@ def test_vqe_reaches_fci(atoms, active):
     exact, _ = fci_pyscf(data, store)
     assert exact - 1e-9 <= result.energy < exact + 1e-6
     assert result.n_energy_evals > 0
-
-
-def test_registry_relation():
-    registry = molecular_registry()
-    assert registry.refinements["vqe"].relation == TargetRelation.variational_upper_bound
-    assert registry.implementations["vqe_statevector"].backend_kind == "quantum_simulator"

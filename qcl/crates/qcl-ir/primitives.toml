@@ -580,3 +580,42 @@ kind = "compute"
 output = "estimate"
 devices = ["cpu"]
 relation = "equivalent"
+
+# ---- QM/MM, embedding, ligands and synthesis -------------------------------------
+# Electrostatic QM/MM single point (OpenMM system + PySCF QM region). RHF is a
+# variational bound and CASCI exact FCI is equivalent within the QM/MM-CASCI model.
+["qmmm.energy"]
+kind = "compute"
+output = "estimate"
+devices = ["cpu"]
+relation = "param"
+relation_param = "method"
+relations = { rhf = "variational_upper_bound", casci = "equivalent" }
+
+# Embedded wave-function theory over atomic fragments. Only the full bath with an FCI
+# fragment solver reproduces the full-space exact energy.
+["embedding.ewf"]
+kind = "compute"
+output = "estimate"
+devices = ["cpu"]
+relation = "param"
+relation_param = "scheme"
+relations = { "full/fci" = "equivalent", "full/ccsd" = "approximate", "dmet/fci" = "approximate", "dmet/ccsd" = "approximate", "bno/fci" = "approximate", "bno/ccsd" = "approximate" }
+
+# RDKit ligand descriptors and rule-based alerts (Lipinski, PAINS, Brenk): screens,
+# not assay outcomes.
+["drug.descriptors"]
+kind = "compute"
+output = "record"
+devices = ["cpu"]
+
+["drug.filter"]
+kind = "compute"
+output = "record"
+devices = ["cpu"]
+
+# AiZynthFinder retrosynthesis in its isolated environment.
+["synthesis.routes"]
+kind = "compute"
+output = "record"
+devices = ["cpu"]

@@ -5,9 +5,7 @@ import json
 import pytest
 from test_g5_evaluation import arguments
 
-from chemflow.agent import cli as agent_cli
 from chemflow.agent.critic import review
-from chemflow.agent.orchestrator import Orchestrator
 from chemflow.agent.policies import ScriptedPolicy
 from chemflow.eval.runner import run
 
@@ -69,31 +67,3 @@ def test_no_candidate_answers_are_reported_for_every_core_kind(tmp_path, monkeyp
     assert summary["candidate"] == row["answer_node"] == expected.candidate
     assert f"use classical: {expected.candidate}" in (directory / "report.md").read_text()
     assert any(item["node"] == expected.candidate for item in summary["results"])
-
-
-@pytest.mark.parametrize("passing", [True, False])
-def test_fake_llm_without_candidates_reports_control(tmp_path, monkeypatch, passing):
-    class Client:
-        def complete(self, messages, tools):
-            return {"content": "Use the classical controls", "tool_calls": []}
-
-    monkeypatch.setattr(agent_cli, "client_factory", lambda *args: Client())
-    monkeypatch.setenv("CHEMFLOW_LIVE_LLM", "1")
-    monkeypatch.setenv("OPENAI_API_KEY", "fake-not-a-key")
-    if not passing:
-        original = Orchestrator._item
-
-        def failed_item(*args):
-            return {**original(*args), "gate_passed": False}
-
-        monkeypatch.setattr(Orchestrator, "_item", staticmethod(failed_item))
-    result = run(arguments(tmp_path / "out", policy="openai", model="fake"))
-    row = result["rows"][0]
-    assert row["llm_calls"] > 0
-    if not passing:
-        assert not row["completed"] and row["answer_node"] is None
-        assert row["decision"] == "revise"
-        return
-    assert row["completed"] and row["answer_node"] and row["decision"] == "stop"
-    report = (tmp_path / "out/h2-ground/report.md").read_text()
-    assert f"use classical: {row['answer_node']}" in report

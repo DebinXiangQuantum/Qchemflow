@@ -8,9 +8,8 @@ from pyscf import ao2mo, fci, lib
 from chemflow.backends.cuda_libs import prefer_wheel_cuda_libraries
 from chemflow.diagnostics import AdapterError
 from chemflow.impls.fci import sector_states
-from chemflow.registry import ImplementationSpec
-from chemflow.runtime import ExecutionResult
-from chemflow.types import BackendKind, Samples
+from chemflow.runtime.result import ExecutionResult
+from chemflow.types import Samples
 
 # Before any CuPy kernel compiles; see cuda_libs.
 prefer_wheel_cuda_libraries()
@@ -271,77 +270,60 @@ def cuda_available() -> bool:
         return False
 
 
-def register_gpu(registry):
-    if not cuda_available():
-        raise RuntimeError("CF-E080: CUDA unavailable: GPU bindings cannot run on this device")
-    for implementation in catalogue().values():
-        registry.register(implementation)
+def device_name() -> str:
+    import cupy as cp
+
+    device = cp.cuda.Device()
+    name = cp.cuda.runtime.getDeviceProperties(device.id)["name"]
+    return f"cuda:{device.id}:{name.decode() if isinstance(name, bytes) else name}"
 
 
-def catalogue() -> dict[str, ImplementationSpec]:
-    """Describe all GPU bindings without loading CUDA or importing CuPy."""
+def gpu_fci_ground(store, hamiltonian, sector, s=None, total_spin=None, **kwargs):
+    """Exact sector ground state of an active-space Hamiltonian on the current CUDA GPU."""
+    import cupy as cp
 
-    def device_name():
-        import cupy as cp
+    data = hamiltonian
+    if ((sector.get("n_alpha"), sector.get("n_beta"), sector.get("n_orb")) !=
+        (data.sector.n_alpha, data.sector.n_beta, data.sector.n_orb)):
+        raise AdapterError("CF-E020", None, "Sector differs from Hamiltonian",
+                           "Match particle counts")
+    target = s if s is not None else total_spin
+    if target is None:
+        target = sector.get("s", sector.get("total_spin"))
+    cp.cuda.Device().synchronize()
+    started = time.perf_counter()
+    kernel = FciKernel(store.get(data.hamiltonian.h1_ref),
+                       store.get(data.hamiltonian.h2_ref), data.sector.n_orb,
+                       (data.sector.n_alpha, data.sector.n_beta), xp=cp)
+    energy, _, diagnostics = fci_ground_state(
+        kernel, data.hamiltonian.ledger.total().value, target)
+    cp.cuda.Device().synchronize()
+    return ExecutionResult((energy, diagnostics), device=device_name(),
+                           cost={"gpu_s": time.perf_counter() - started},
+                           diagnostics=diagnostics)
 
-        device = cp.cuda.Device()
-        name = cp.cuda.runtime.getDeviceProperties(device.id)["name"]
-        return f"cuda:{device.id}:{name.decode() if isinstance(name, bytes) else name}"
 
-    def ground(store, hamiltonian, sector, s=None, total_spin=None, **kwargs):
-        import cupy as cp
+def gpu_sample(store, prep, shots, seed=0, **kwargs):
+    """Sample computational-basis configurations from a prepared state on the GPU."""
+    import cupy as cp
 
-        data = hamiltonian
-        if ((sector.get("n_alpha"), sector.get("n_beta"), sector.get("n_orb")) !=
-            (data.sector.n_alpha, data.sector.n_beta, data.sector.n_orb)):
-            raise AdapterError("CF-E020", None, "Sector differs from Hamiltonian",
-                               "Match particle counts")
-        target = s if s is not None else total_spin
-        if target is None:
-            target = sector.get("s", sector.get("total_spin"))
-        cp.cuda.Device().synchronize()
-        started = time.perf_counter()
-        kernel = FciKernel(store.get(data.hamiltonian.h1_ref),
-                           store.get(data.hamiltonian.h2_ref), data.sector.n_orb,
-                           (data.sector.n_alpha, data.sector.n_beta), xp=cp)
-        energy, _, diagnostics = fci_ground_state(
-            kernel, data.hamiltonian.ledger.total().value, target)
-        cp.cuda.Device().synchronize()
-        return ExecutionResult((energy, diagnostics), device=device_name(),
-                               cost={"gpu_s": time.perf_counter() - started},
-                               diagnostics=diagnostics)
-
-    def sample(store, prep, shots, seed=0, **kwargs):
-        import cupy as cp
-
-        if shots < 1:
-            raise ValueError("Positive shots required")
-        cp.cuda.Device().synchronize()
-        started = time.perf_counter()
-        state = cp.asarray(store.get(prep.state_ref))
-        probabilities = cp.abs(state) ** 2
-        if not bool(cp.isclose(probabilities.sum(), 1)):
-            raise ValueError("State must be normalized")
-        rng = cp.random.RandomState(seed)
-        drawn = rng.choice(len(state), size=shots, p=probabilities)
-        if prep.sector is not None:
-            drawn = cp.asarray(sector_states(prep.sector))[drawn]
-        keys, counts = cp.unique(drawn, return_counts=True)
-        samples = Samples(counts={str(key): int(count) for key, count in
-                                  zip(cp.asnumpy(keys), cp.asnumpy(counts))}, shots=shots,
-                          encoding_id=prep.encoding_id, basis="computational",
-                          source="quantum_simulator", seed=seed, device=device_name())
-        cp.cuda.Device().synchronize()
-        return ExecutionResult(samples, device=samples.device,
-                               cost={"gpu_s": time.perf_counter() - started, "sim_shots": shots})
-
-    implementations = (ImplementationSpec(id="fci_cupy", version="1", target="ground_energy",
-        implements="fci", backend_kind=BackendKind.gpu_numeric, adapter=ground,
-        params=frozenset({"s", "total_spin"})),
-        ImplementationSpec(id="statevector_cupy", version="1",
-        target="sample_configurations", backend_kind=BackendKind.quantum_simulator,
-        execution_role="emulator", emulates="sample_configurations",
-        effects="random", adapter=sample, params=frozenset({"shots", "seed"}),
-        resource_model=lambda shots=None, **kwargs:
-        {"sim_shots": shots}))
-    return {implementation.id: implementation for implementation in implementations}
+    if shots < 1:
+        raise ValueError("Positive shots required")
+    cp.cuda.Device().synchronize()
+    started = time.perf_counter()
+    state = cp.asarray(store.get(prep.state_ref))
+    probabilities = cp.abs(state) ** 2
+    if not bool(cp.isclose(probabilities.sum(), 1)):
+        raise ValueError("State must be normalized")
+    rng = cp.random.RandomState(seed)
+    drawn = rng.choice(len(state), size=shots, p=probabilities)
+    if prep.sector is not None:
+        drawn = cp.asarray(sector_states(prep.sector))[drawn]
+    keys, counts = cp.unique(drawn, return_counts=True)
+    samples = Samples(counts={str(key): int(count) for key, count in
+                              zip(cp.asnumpy(keys), cp.asnumpy(counts))}, shots=shots,
+                      encoding_id=prep.encoding_id, basis="computational",
+                      source="quantum_simulator", seed=seed, device=device_name())
+    cp.cuda.Device().synchronize()
+    return ExecutionResult(samples, device=samples.device,
+                           cost={"gpu_s": time.perf_counter() - started, "sim_shots": shots})

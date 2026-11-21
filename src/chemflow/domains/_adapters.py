@@ -1,19 +1,8 @@
-"""Registration and result construction shared by external domain adapters."""
+"""Result construction shared by the domain kernels."""
 
 from chemflow.context import Context
-from chemflow.registry import ImplementationSpec, OperatorSpec
-from chemflow.types import BackendKind, CostRecord, Estimate, Provenance
+from chemflow.types import CostRecord, Estimate, Provenance
 from chemflow.units import Q
-
-
-def register_adapter(registry, name, adapter, inputs, output, parameters, semantics,
-                     effects="pure", cacheable=True):
-    registry.register(OperatorSpec(id=f"chemflow.{name}", version=1, inputs=inputs,
-        output=output, parameters={key: "JSON" for key in parameters},
-        semantics=semantics, effects=effects))
-    registry.register(ImplementationSpec(id=name, version="1", target=name,
-        adapter=adapter, backend_kind=BackendKind.cpu_numeric,
-        params=frozenset(parameters), effects=effects, cacheable=cacheable))
 
 
 def estimate(value, kind, relation, keys, device, diagnostics=None, seed=None):

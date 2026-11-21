@@ -1,5 +1,11 @@
 # G2: fast classical baselines
 
+> **Status (2026-11-21).** This guide records a milestone built on ChemFlow's earlier
+> engine (IR programs, registry operators, static checker and orchestrator), which has
+> been removed. The science and the validation below still hold; signed tasks now run as
+> QCL screens, and the operations named here map to QCL primitives or plain kernels as
+> listed in [legacy-retirement.md](legacy-retirement.md).
+
 Load `load_registry(["molecular", "reactions", "baselines"])` to combine
 electronic structure, geometry/thermochemistry operations, and `potential_energy`.
 The optional extras are `xtb` (tblite, ASE) and `mlp` (mace-torch, torch).

@@ -2,11 +2,8 @@ import json
 
 import pytest
 
-from chemflow.agent.task import TaskSpec, TaskStore
+from chemflow.agent.task import TaskSpec
 from chemflow.apps import catalog, draft
-from chemflow.check import check
-from chemflow.domains import load_registry, pack_for_target, pack_names
-from chemflow.runtime import Executor
 
 
 def test_catalogue_is_detached_and_drafts_are_unsigned():
@@ -46,27 +43,6 @@ def test_optional_properties_and_solvents():
     rate = draft("reaction_barrier", parameters={"rate_constant": True}, example=True)[0]
     assert rate["target"]["thermo"]["quantity"] == "gibbs"
     assert rate["target"]["rate_constant"]
-
-
-def test_metabolic_registry_identity_execution_and_relation():
-    spec = TaskSpec.model_validate(draft("metabolic_sites", example=True)[0])
-    record = TaskStore("unit-test-only").freeze(spec, "human-test-fixture")
-    registry = load_registry(pack_names())
-    pack = pack_for_target("metabolic_sites")
-    plan, controls = pack.base_plan(record)
-    assert controls and plan.references and not check(plan, registry)
-    assert registry.search("metabolic")
-    assert not pack.identity(plan, record, {})
-    computed = Executor(registry).run(plan)
-    result = computed[controls[0]]
-    assert result.value.unit == "dimensionless"
-    assert 0 < result.value.value < 1
-    assert result.diagnostics["evidence"] == "empirical"
-    assert result.diagnostics["relation_status"] == "proved"
-    assert result.relation == "equivalent"
-    plan.nodes[0].params["level"]["method"] = "gfn2"
-    assert pack.identity(plan, record, {})
-    assert any(item.code == "CF-E080" for item in check(plan, registry))
 
 
 def test_missing_inputs_and_unknown_apps_are_errors():

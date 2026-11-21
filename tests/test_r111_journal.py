@@ -1,8 +1,9 @@
 import json
 
+from llm_tools import QueryInput, ToolRegistry
+
 from chemflow.agent.journal import Journal
 from chemflow.agent.llm import FakeLLMClient, LLMPolicy, _redact
-from chemflow.agent.tools import QueryInput, ToolRegistry
 
 
 def test_journal_call_alias_preserves_redacted_arguments(tmp_path):

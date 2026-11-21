@@ -27,16 +27,7 @@ Contract:
 """
 from __future__ import annotations
 
-import json
 import sys
-
-from test_review_r114_118 import (
-    _base,
-    _designer_calls_before_screening,
-    _eval,
-    _results,
-    _turn,
-)
 
 from chemflow.agent.critic import CriticDecision, review
 
@@ -74,65 +65,3 @@ def _revise_candidates(monkeypatch):
 def _answered_by_a_control(row):
     assert row["decision"] == "stop" and row["completed"] and row["correct"], row
     assert row["answer_node"] and not row["answer_from_candidate"], row
-
-
-def test_r121_the_scripted_loop_answers_after_its_last_round(tmp_path, monkeypatch) -> None:
-    from test_m3a_task import spec
-
-    from chemflow.agent.orchestrator import Orchestrator
-    from chemflow.agent.task import TaskStore
-
-    _revise_candidates(monkeypatch)
-    store = TaskStore("reviewer")
-    agent = Orchestrator(store, lambda task: store.freeze(task, "reviewer"), tmp_path,
-                         max_rounds=1)  # the designer still has candidates when rounds run out
-    run = agent.run(spec(), diagnostics={"suggested_active": {"n_elec": 2, "n_orb": 2}})
-    assert run.decision.decision == "stop" and run.decision.candidate, vars(run.decision)
-    assert not run.decision.candidate.startswith("candidate")
-    assert run.decision.reason.startswith("use classical")
-
-
-def test_r121_the_llm_design_path_answers_after_a_revise(tmp_path, monkeypatch) -> None:
-    _revise_candidates(monkeypatch)
-
-    def script(call, messages):
-        if call == 1:
-            return _turn([("plan.candidates", {"plan_id": _base(messages), "candidates": [
-                {"template": "sci", "select_cutoff": 0.01, "shots": None}]})])
-        built = next(data for name, data in _results(messages) if name == "plan.candidates")
-        return _turn([("design.submit", {"plan_id": built["plan_id"]})])
-
-    _, rows, _, _ = _eval(tmp_path, monkeypatch, "h2-ground", script)
-    assert rows["h2-ground"]["design"] == "screened"
-    _answered_by_a_control(rows["h2-ground"])
-
-
-def test_r122_submit_returns_static_check_errors_and_the_turn_continues(tmp_path,
-                                                                        monkeypatch) -> None:
-    broken = {"id": "broken0", "op": "chemflow.ground_energy", "inputs": [], "params": [],
-              "effects": "pure", "refinement": None, "binding": None}
-
-    def script(call, messages):
-        base = _base(messages)
-        if call == 1:
-            return _turn([("plan.add_node", {"plan_id": base, "node": broken, "target": True})])
-        if call == 2:
-            added = [data for name, data in _results(messages) if name == "plan.add_node"][-1]
-            assert added["diagnostics"], "the broken node must fail the static check"
-            return _turn([("design.submit", {"plan_id": added["plan_id"]})])
-        if call == 3:
-            return _turn([("plan.candidates", {"plan_id": base, "candidates": [
-                {"template": "sci", "select_cutoff": 0.01, "shots": None}]})])
-        if call == 4:
-            built = [data for name, data in _results(messages) if name == "plan.candidates"][-1]
-            return _turn([("design.submit", {"plan_id": built["plan_id"]})])
-        return _turn(content="should never be asked")
-
-    _, rows, journal, _ = _eval(tmp_path, monkeypatch, "h2-ground", script)
-    entries = journal("h2-ground")
-    assert _designer_calls_before_screening(entries) == 4
-    submits = [entry["decision"] for entry in entries if entry["state"] == "LLM_TOOL" and
-               entry["decision"].get("name") == "design.submit"]
-    assert "error" in submits[0] and "CF-E" in json.dumps(submits[0]["error"])
-    assert "result" in submits[1]
-    assert rows["h2-ground"]["design"] == "screened"

@@ -30,58 +30,11 @@ Contract:
 """
 from __future__ import annotations
 
-import pytest
-import test_review_v1c as v1c
-
 
 def _sci(tools, base):
     built = tools.call("designer", "plan.candidates", {"plan_id": base["plan_id"], "candidates": [
         {"template": "sci", "select_cutoff": 1e-4}]})["data"]
     return built["plan_id"], next(iter(built["ids"].values()))
-
-
-def test_v1b_a_bug_hidden_at_the_task_point_is_found_and_shrunk(monkeypatch) -> None:
-    from chemflow.ops import molecular
-
-    original = molecular.sci_energy
-
-    def buggy(data, sector, store, **kwargs):
-        energy, diagnostics, extra = original(data, sector, store, **kwargs)
-        # Nuclear repulsion below 1.30 hartree means H-H spacing beyond about 1.76 angstrom
-        if data.hamiltonian.ledger.total().value < 1.30:
-            energy -= 0.002
-        return energy, diagnostics, extra
-
-    monkeypatch.setattr(molecular, "sci_energy", buggy)
-    tools, base = v1c._tools(v1c._h4())
-    plan_id, node = _sci(tools, base)
-    screened = tools.call("designer", "run", {"plan_id": plan_id, "scale": "screen"})["data"]
-    assert next(gate for gate in screened["gates"] if gate["node"] == node)["passed"]
-    report = tools.call("critic", "algorithm.falsify", {"plan_id": plan_id,
-                                                        "node_id": node})["data"]
-    assert report["verdict"] == "falsified"
-    example = report["counterexamples"][0]
-    assert example["property"] == "variational_upper_bound"
-    assert 1.70 <= example["instance"]["geometry_scale"] <= 1.76 + 0.1 + 1e-9
-    assert report["refuted_axioms"]
-
-
-def test_v1b_a_correct_design_comes_back_clean() -> None:
-    tools, base = v1c._tools(v1c._h4())
-    plan_id, node = _sci(tools, base)
-    report = tools.call("critic", "algorithm.falsify", {"plan_id": plan_id,
-                                                        "node_id": node})["data"]
-    assert report["verdict"] == "clean" and not report["counterexamples"]
-    values = [instance["geometry_scale"] for instance in report["instances"]]
-    assert len(values) >= 12 and min(values) == pytest.approx(0.7) and max(values) == pytest.approx(2.5)
-    assert all(0.7 - 1e-12 <= value <= 2.5 + 1e-12 for value in values)
-    assert {"edge", "random"} <= set(report["generators"])
-
-
-def test_v1b_the_tool_takes_no_domain_from_the_agent() -> None:
-    tools, _ = v1c._tools(v1c._h4())
-    schema = next(item for item in tools.schemas("critic") if item["name"] == "algorithm.falsify")
-    assert set(schema["parameters"]["properties"]) == {"plan_id", "node_id"}
 
 
 def test_v1b_the_critic_never_escalates_a_refuted_relation() -> None:

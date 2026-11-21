@@ -51,13 +51,6 @@ Contract:
 """
 from __future__ import annotations
 
-import pytest
-
-from chemflow.agent.task import TaskSpec, TaskStore
-from chemflow.agent.tools import make_tools
-from chemflow.ops.molecular import molecular_registry
-from chemflow.runtime import Executor
-
 BAR = 0.0016
 
 
@@ -72,17 +65,6 @@ def _h4(validity=True):
         "allowed_effects": ["pure", "simulator"], "decision": "d",
         **({"validity": [{"axis": "geometry_scale", "range": [0.7, 2.5], "points": 7,
                           "resolution": 0.1}]} if validity else {})}
-
-
-def _tools(spec):
-    store = TaskStore("reviewer")
-    record = store.freeze(TaskSpec.model_validate(spec), "reviewer")
-    registry = molecular_registry()
-    tools = make_tools(registry, Executor(registry), record, store)
-    empty = tools.call("designer", "plan.new", {"identifier": "p"})["data"]["plan_id"]
-    base = tools.call("modeler", "plan.base", {"plan_id": empty,
-                                               "active": {"n_elec": 4, "n_orb": 4}})["data"]
-    return tools, base
 
 
 def _method(tools, plan_id, method):
@@ -102,68 +84,6 @@ def _pyscf_error(spacing):
 
 def _region(axis, value):
     return next(region for region in axis["regions"] if region["lo"] <= value <= region["hi"])
-
-
-@pytest.fixture(scope="module")
-def ccsd_t_map():
-    tools, base = _tools(_h4())
-    node = _method(tools, base["plan_id"], "ccsd_t")
-    return tools.call("critic", "algorithm.validity", {"plan_id": base["plan_id"],
-                                                       "node_id": node})["data"]
-
-
-def test_v1c_ccsd_t_on_a_stretching_h4_chain_is_valid_then_invalid(ccsd_t_map) -> None:
-    axis = ccsd_t_map["axes"][0]
-    assert axis["axis"] == "geometry_scale" and axis["range"] == [0.7, 2.5]
-    assert _region(axis, 1.0)["status"] in ("sampled_valid", "certified")
-    assert _region(axis, 0.8)["status"] in ("sampled_valid", "certified")
-    assert _region(axis, 2.5)["status"] == "invalid"
-    assert ccsd_t_map["task_point"]["status"] in ("sampled_valid", "certified")
-    valid_hi = max(region["hi"] for region in axis["regions"]
-                   if region["status"] in ("sampled_valid", "certified") and region["lo"] < 1.5)
-    invalid_lo = min(region["lo"] for region in axis["regions"] if region["status"] == "invalid")
-    assert 1.3 <= valid_hi <= invalid_lo <= 1.7, (valid_hi, invalid_lo)
-    assert invalid_lo - valid_hi <= 0.1 + 1e-9
-    assert all(point["certified_bound"] is None for point in axis["points"])  # no state vector
-    assert axis["counterexamples"]
-
-
-def test_v1c_counterexamples_are_real(ccsd_t_map) -> None:
-    for example in ccsd_t_map["axes"][0]["counterexamples"][:2]:
-        independent = _pyscf_error(example["value"] * 1.0)  # scale 1.0 is 1.0 angstrom spacing
-        assert abs(independent) > BAR
-        assert abs(abs(example["error"]) - abs(independent)) < 1e-5
-
-
-def test_v1c_variational_results_carry_a_sound_certificate() -> None:
-    tools, base = _tools(_h4())
-    built = tools.call("designer", "plan.candidates", {"plan_id": base["plan_id"], "candidates": [
-        {"template": "sci", "select_cutoff": 1e-4}]})["data"]
-    node = next(iter(built["ids"].values()))
-    mapped = tools.call("critic", "algorithm.validity", {"plan_id": built["plan_id"],
-                                                         "node_id": node})["data"]
-    points = mapped["axes"][0]["points"]
-    assert points and all(point["certified_bound"] is not None for point in points)
-    for point in points:
-        assert point["certified_bound"] + 1e-10 >= abs(point["error"]), point
-    assert mapped["task_point"]["status"] in ("certified", "sampled_valid")
-
-
-def test_v1c_the_domain_comes_from_the_signed_task() -> None:
-    signed, _ = _tools(_h4())  # revised after R134: the tool is offered only with a domain
-    schema = next(item for item in signed.schemas("critic") if item["name"] == "algorithm.validity")
-    assert set(schema["parameters"]["properties"]) == {"plan_id", "node_id"}
-    tools, base = _tools(_h4(validity=False))
-    node = _method(tools, base["plan_id"], "ccsd_t")
-    with pytest.raises(Exception) as caught:
-        tools.call("critic", "algorithm.validity", {"plan_id": base["plan_id"], "node_id": node})
-    assert "validity" in str(caught.value).lower()
-    from pydantic import ValidationError
-
-    with pytest.raises(ValidationError):
-        TaskSpec.model_validate(_h4() | {"validity": [{"axis": "geometry_scale",
-                                                       "range": [1.2, 2.5], "points": 5,
-                                                       "resolution": 0.1}]})  # excludes 1.0
 
 
 def test_v1c_the_critic_escalates_only_inside_the_valid_region() -> None:

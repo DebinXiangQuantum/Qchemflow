@@ -17,15 +17,20 @@ pytest.importorskip("qcl")
 def _evaluate(tmp_path, suite, tasks):
     args = argparse.Namespace(suite=suite, suite_file=None, tasks=",".join(tasks),
                               policy="scripted", model=None, roles="designer", jobs=1,
-                              out=tmp_path / suite, max_turns=8, engine="qcl")
+                              out=tmp_path / suite, max_turns=8)
     return {row["id"]: row for row in run_suite(args)["rows"]}
 
 
-def test_engine_selection_defaults_to_qcl_for_scripted_policies():
-    assert agent_cli.engine(argparse.Namespace(policy="scripted")) == "qcl"
-    assert agent_cli.engine(argparse.Namespace(policy="anthropic", engine="auto")) == "legacy"
-    assert agent_cli.engine(argparse.Namespace(policy="anthropic", engine="qcl")) == "qcl"
-    assert agent_cli.engine(argparse.Namespace(policy="scripted", engine="legacy")) == "legacy"
+def test_the_engine_option_is_gone(monkeypatch, capsys):
+    from chemflow.cli import main
+
+    assert not hasattr(agent_cli, "engine")
+    monkeypatch.setattr("sys.argv", ["chemflow", "agent", "run", "--task", "t.json",
+                                     "--public-key", "k.pem", "--out", "o",
+                                     "--engine", "legacy"])
+    with pytest.raises(SystemExit) as raised:
+        main()
+    assert raised.value.code == 2 and "--engine" in capsys.readouterr().err
 
 
 def test_ground_energy_screen_escalates_a_passing_candidate(tmp_path):
@@ -68,7 +73,7 @@ def test_dry_run_compiles_one_screen_plan(tmp_path):
     agent_cli.run(argparse.Namespace(task=tmp_path / "task.json",
                                      public_key=tmp_path / "public.pem", out=tmp_path / "out",
                                      policy="scripted", model=None, roles="designer",
-                                     rounds=2, max_turns=8, engine="qcl", dry_run=True))
+                                     rounds=2, max_turns=8, dry_run=True))
     review = json.loads((tmp_path / "out" / "qcl-review.json").read_text())
     names = [item["name"] for item in review["outputs"]]
     assert names[:4] == list(screen.LADDER) and names[-1] == "fci"
@@ -172,6 +177,47 @@ def test_llm_designer_cannot_submit_invented_methods(tmp_path):
     states = [json.loads(line)["state"] for line in
               (tmp_path / "out" / "journal.jsonl").read_text().splitlines()]
     assert "DESIGN_DECLINED" in states and states.count("SCREEN") == 1
+
+
+def _llm_run(tmp_path, task_id, turns):
+    import qcl
+    from chemflow.agent.llm import FakeLLMClient, LLMPolicy
+    from chemflow.agent.qcl_run import run as run_screens
+    from chemflow.agent.qcl_tools import QclToolRegistry
+
+    task = next(item for item in load_suite("core").tasks if item.id == task_id)
+    record = _signed(tmp_path, task.spec)
+    designer = FakeLLMClient(turns)
+    summary = run_screens(argparse.Namespace(out=tmp_path / "out"), record,
+                          qcl.Cluster.local(),
+                          policies={"designer": LLMPolicy("designer", designer,
+                                                          QclToolRegistry())},
+                          policy="fake")
+    journal = [json.loads(line) for line in
+               (tmp_path / "out" / "journal.jsonl").read_text().splitlines()]
+    return summary, journal, designer
+
+
+def test_unaffordable_llm_candidates_refuse_the_design_not_the_task(tmp_path):
+    # R126 on QCL: the submission is rejected against the remaining budget and the turn
+    # continues; the task still answers from the first round.
+    summary, journal, designer = _llm_run(tmp_path, "h2-ground", [
+        _turn("design.submit", {"candidates": [{"template": "sqd", "shots": 1_000_000}]}),
+        _turn("design.decline", {"reason": "SQD at this scale is unaffordable"})])
+    rejected = json.loads(next(message["content"] for message in designer.messages[1]
+                               if message["role"] == "tool"))
+    assert "remaining sim_shots budget" in rejected["error"]["message"]
+    assert summary["decision"] != "refused" and summary["refusal"] is None
+    states = [entry["state"] for entry in journal]
+    assert "DESIGN_DECLINED" in states and states.count("SCREEN") == 1
+
+
+def test_a_designer_that_submits_nothing_is_a_refused_design(tmp_path):
+    summary, journal, _ = _llm_run(tmp_path, "h2-ground", [
+        _turn("methods.list"), {"content": "I would try SCI.", "tool_calls": []}])
+    refused = next(entry for entry in journal if entry["state"] == "DESIGN_REFUSED")
+    assert "text reply" in refused["reason"]
+    assert summary["decision"] == "stop" and summary["candidate"] == "fci"
 
 
 def test_report_lint_rejects_unrecorded_numbers():

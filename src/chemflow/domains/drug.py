@@ -10,12 +10,10 @@ from urllib.request import urlopen
 
 from pydantic import BaseModel
 
-from chemflow import build
-from chemflow.diagnostics import AdapterError, Diagnostic
+from chemflow.diagnostics import AdapterError
 from chemflow.ids import content_hash
-from chemflow.relations import combine_linear
 
-from ._adapters import estimate, register_adapter
+from ._adapters import estimate
 
 
 class LigandLibrary(BaseModel, frozen=True):
@@ -112,11 +110,6 @@ def ligands_from_names(store, names):
     if fetched:
         _write_name_cache(path, {**records, **fetched})
     return LigandLibrary(ligands=result)
-
-
-def name_resolution_resources(**kwargs):
-    return {"wall_s": None, "cpu_core_s": 0, "gpu_s": 0, "sim_shots": 0,
-            "qpu_s": 0, "qpu_shots": 0}
 
 
 class FilterResult(BaseModel, frozen=True):
@@ -230,91 +223,6 @@ def component_specs(complex, fragments, electronic_model, counterpoise):
     return components
 
 
-def component_energy(store, molecule, electronic_model, method):
-    from pyscf import ao2mo, cc, fci, gto, mp, scf
-
-    from chemflow.types import ConstantLedger, Hamiltonian, Sector
-    from chemflow.units import Q
-
-    if molecule.get("charge", 0) or molecule.get("spin", 0):
-        raise ValueError("Interaction components must be neutral and closed-shell")
-    if set(electronic_model) - {"basis", "hamiltonian_class"} or electronic_model.get(
-            "hamiltonian_class", "nonrel_bo") != "nonrel_bo":
-        raise ValueError("Interaction adapter supports the all-electron nonrelativistic model")
-    mol = gto.M(atom=molecule["atoms"], unit=molecule.get("unit", "angstrom"),
-                basis=electronic_model["basis"], verbose=0)
-    reference = scf.RHF(mol).run(conv_tol=1e-12)
-    if not reference.converged:
-        raise ValueError("Interaction reference SCF failed to converge")
-    if method == "hf":
-        energy, relation = reference.e_tot, "variational_upper_bound"
-    elif method == "fci":
-        calculation = fci.FCI(reference)
-        calculation.conv_tol = 1e-12
-        energy = calculation.kernel()[0]
-        if not calculation.converged:
-            raise ValueError("Interaction FCI failed to converge")
-        relation = "equivalent"
-    elif method == "mp2":
-        energy, relation = mp.MP2(reference).run().e_tot, "approximate"
-    elif method in ("ccsd", "ccsd_t"):
-        calculation = cc.CCSD(reference).run(conv_tol=1e-11)
-        if not calculation.converged:
-            raise ValueError("Interaction CCSD failed to converge")
-        energy = calculation.e_tot + (calculation.ccsd_t() if method == "ccsd_t" else 0)
-        relation = "approximate"
-    else:
-        raise ValueError("Unsupported interaction method")
-    orbitals = reference.mo_coeff
-    hamiltonian = Hamiltonian(
-        h1_ref=store.put(orbitals.T @ reference.get_hcore() @ orbitals),
-        h2_ref=store.put(ao2mo.restore(1, ao2mo.kernel(mol, orbitals), orbitals.shape[1])),
-        n_orb=orbitals.shape[1], space=store.put(orbitals),
-        ledger=ConstantLedger().add("nuclear_repulsion", Q(float(mol.energy_nuc()), "hartree")))
-    sector = Sector(n_alpha=mol.nelec[0], n_beta=mol.nelec[1], n_orb=orbitals.shape[1])
-    return estimate(float(energy), "total_electronic_energy", relation,
-        {"hamiltonian_id": content_hash((molecule, electronic_model))}, "pyscf",
-        diagnostics={"hamiltonian_witness": hamiltonian.model_dump(mode="json"),
-                     "molecule_witness": molecule,
-                     "electronic_model_witness": electronic_model,
-                     "sector_witness": sector.model_dump(mode="json")})
-
-
-def component_matches(value, molecule, electronic_model):
-    from chemflow.types import ElectronicModel
-    from chemflow.types.model import model_protocol_id
-
-    context = value.context.keys
-    if context.get("hamiltonian_id") == content_hash((molecule, electronic_model)):
-        return True
-    geometry = {key: molecule.get(key, default) for key, default in
-                (("atoms", None), ("unit", "angstrom"), ("charge", 0), ("spin", 0))}
-    model_id = content_hash(ElectronicModel.model_validate(electronic_model))
-    return (context.get("geometry_id") == content_hash(geometry) and
-            context.get("model_id") == model_id and
-            context.get("model_protocol_id") == model_protocol_id(model_id, None))
-
-
-def interaction_energy(store, coefficients, target, **components):
-    expected = component_specs(**target)
-    ports = [f"component{index}" for index in range(len(expected))]
-    wanted = dict(zip(ports, [1, *([-1] * (len(expected) - 1))]))
-    if coefficients != wanted or set(components) != set(ports):
-        raise ValueError("Interaction requires +1 complex and -1 per fragment")
-    for port, molecule in zip(ports, expected):
-        value = components[port]
-        if (value.kind != "total_electronic_energy" or
-                not component_matches(value, molecule, target["electronic_model"])):
-            raise AdapterError("CF-E002", None, "Interaction component identity mismatch",
-                               "Use electronic energies in the declared fragment bases")
-    relation = combine_linear([(coefficients[port], value.relation)
-                               for port, value in components.items()])
-    return estimate(sum(coefficients[port] * value.value.to("hartree").value
-                        for port, value in components.items()), "interaction_energy", relation,
-                    {"hamiltonian_id": content_hash(target)}, "pyscf:counterpoise",
-                    diagnostics={"counterpoise": target["counterpoise"]})
-
-
 def dock(store, library, receptor_pdbqt, center, box, seed=0):
     try:
         from meeko import MoleculePreparation, PDBQTWriterLegacy
@@ -352,95 +260,3 @@ def dock(store, library, receptor_pdbqt, center, box, seed=0):
     return estimate(score, "docking_score", "approximate",
         {"hamiltonian_id": content_hash((ligand, text, center, box))}, "autodock-vina",
         diagnostics={"ligand": name}, seed=seed)
-
-
-def context_check(node, inputs, context, nodes):
-    if node.op == "component_energy":
-        context.update(kind="total_electronic_energy", unit="hartree",
-                       hamiltonian_id=content_hash((node.params.get("molecule", inputs.get("molecule")),
-                                                   node.params["electronic_model"])))
-    elif node.op == "interaction_energy":
-        context.update(kind="interaction_energy", unit="hartree",
-                       hamiltonian_id=content_hash(node.params["target"]))
-        if any(value.get("kind") != "total_electronic_energy" for value in inputs.values()):
-            return [Diagnostic(code="CF-E002", node=node.id,
-                               message="Interaction requires electronic energies")]
-    elif node.op == "dock":
-        context.update(kind="docking_score", unit="kcal/mol")
-    return []
-
-
-def base_plan(record, active=None):
-    if active is not None:
-        raise ValueError("Interaction reference uses the full molecular orbital space")
-    target = record.spec.target.model_dump(exclude={"kind", "operator"})
-    species = component_specs(**target)
-    with build.program("interaction-controls") as builder:
-        controls = []
-        for method in ("hf", "mp2", "ccsd", "ccsd_t", "fci"):
-            components = {f"component{index}": builder.node("component_energy",
-                molecule=molecule, electronic_model=target["electronic_model"], method=method)
-                for index, molecule in enumerate(species)}
-            result = builder.node("interaction_energy", **components, target=target,
-                coefficients={port: 1 if port == "component0" else -1 for port in components})
-            if method == "fci":
-                builder.ir.references = [result.id]
-            else:
-                controls.append(result.id)
-        builder.ir.targets = [*controls, *builder.ir.references]
-        return builder.to_ir(), controls
-
-
-def identity(plan, record, contexts):
-    from chemflow.verify.identity_diff import plan_hints
-
-    target = record.spec.target.model_dump(exclude={"kind", "operator"})
-    species = component_specs(**target)
-    nodes = {node.id: node for node in plan.nodes}
-    issues = []
-    for identifier in set(plan.targets + plan.references):
-        node = nodes.get(identifier)
-        coefficients = {f"component{index}": 1 if index == 0 else -1
-                        for index in range(len(species))}
-        valid = (node is not None and node.op == "interaction_energy" and
-                 node.params == {"target": target, "coefficients": coefficients} and
-                 set(node.inputs) == set(coefficients))
-        if valid:
-            for index, molecule in enumerate(species):
-                component = nodes.get(node.inputs[f"component{index}"])
-                valid = valid and (component is not None and component.op == "component_energy"
-                    and component.params.get("molecule") == molecule
-                    and component.params.get("electronic_model") == target["electronic_model"])
-        if not valid:
-            issues.append(Diagnostic(code="CF-E120", node=identifier,
-                                     message="Interaction target identity mismatch",
-                                     fix_hints=plan_hints(plan, base_plan(record)[0], identifier)))
-    return issues
-
-
-def register(registry):
-    for name, adapter, inputs, output, parameters, semantics, effect in (
-        ("ligands_from_names", ligands_from_names, {}, "ligand_library", ("names",),
-         "PubChem names to RDKit-validated structures with cached provenance; check the CID",
-         "network"),
-        ("ligand_library", ligand_library, {}, "ligand_library", ("ligands",),
-         "RDKit sanitized ligand names, canonical isomeric SMILES and InChIKeys", "pure"),
-        ("filter_ligands", filter_ligands, {"library": "ligand_library"}, "filter_result", ("rules",),
-         "Lipinski cutoffs and RDKit PAINS/Brenk alerts; flags are not efficacy predictions", "pure"),
-        ("descriptors", descriptors, {"library": "ligand_library"}, "descriptors", (),
-         "RDKit molecular weight, logP, hydrogen donors/acceptors and TPSA", "pure"),
-        ("conformers", conformers, {"library": "ligand_library"}, "conformers", ("seed", "count"),
-         "Seeded ETKDGv3 conformers relaxed with RDKit MMFF94", "random"),
-        ("component_energy", component_energy, {}, "estimate",
-         ("molecule", "electronic_model", "method"),
-         "PySCF HF/MP2/CCSD/CCSD(T)/FCI component energy including ghost basis functions", "pure"),
-        ("interaction_energy", interaction_energy, {}, "estimate", ("coefficients", "target"),
-         "Complex minus fragments; counterpoise uses ghost atoms, combine_linear relations", "pure"),
-        ("dock", dock, {"library": "ligand_library"}, "estimate",
-         ("receptor_pdbqt", "center", "box", "seed"),
-         "AutoDock Vina score with meeko ligand preparation; never an electronic energy", "random"),
-    ):
-        register_adapter(registry, name, adapter, inputs, output, parameters, semantics, effect)
-    registry.implementations["ligands_from_names"].cacheable = False
-    registry.implementations["ligands_from_names"].resource_model = name_resolution_resources
-    registry.context_checks.append(context_check)

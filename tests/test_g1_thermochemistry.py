@@ -8,16 +8,9 @@ import numpy as np
 import pytest
 from scipy import constants as sc
 
-from chemflow import build
-from chemflow.agent.orchestrator import Orchestrator
-from chemflow.agent.task import TaskSpec, TaskStore
-from chemflow.check import check
-from chemflow.check.static import infer_context
+from chemflow.agent.task import TaskSpec
 from chemflow.diagnostics import AdapterError
-from chemflow.domains import get_pack, load_registry
-from chemflow.domains.reactions import identity
 from chemflow.domains.thermochemistry import thermochemistry
-from chemflow.runtime import Executor
 from chemflow.signing import TaskSigner, generate_keypair
 from chemflow.types import ElectronicModel
 
@@ -41,13 +34,6 @@ def task(quantity=None):
             **({"thermo": {"quantity": quantity}} if quantity else {})},
         "gates": [{"kind": "abs_error_vs_exact", "threshold": .0016, "unit": "hartree"}],
         "budget": {"wall_s": 600}, "allowed_effects": ["pure"], "decision": "compare"})
-
-
-def plan_for(quantity=None):
-    store = TaskStore("g1")
-    record = store.freeze(task(quantity), "test")
-    plan, _ = get_pack("reactions").base_plan(record)
-    return plan, record, store
 
 
 def test_ts_excludes_and_reports_one_imaginary_mode():
@@ -90,73 +76,6 @@ def test_invalid_thermal_parameters(params):
         thermal(**params)
 
 
-@pytest.mark.parametrize("quantity", [None, "enthalpy", "gibbs"])
-def test_plan_identity_and_enthalpy_path(quantity):
-    plan, record, store = plan_for(quantity)
-    registry = load_registry(["molecular", "reactions"])
-    contexts, issues = infer_context(plan, registry)
-    assert not issues and not identity(plan, record, contexts)
-    assert sum(node.op == "thermochemistry" for node in plan.nodes) == (2 if quantity else 0)
-    result = Executor(registry).run_plan(plan, record, store)
-    reference = next(node for node in plan.nodes if node.id == plan.references[0])
-    expected = sum(coefficient * (result[reference.inputs[port]].value.value +
-        (result[reference.inputs[f"thermo{port.removeprefix('species')}"]][
-            "h_corr" if quantity == "enthalpy" else "g_corr"] if quantity else 0))
-        for port, coefficient in reference.params["coefficients"].items())
-    assert result[reference.id].value.value == pytest.approx(expected)
-    assert result[reference.id].kind == {None: "reaction_energy", "enthalpy": "reaction_enthalpy",
-                                       "gibbs": "reaction_gibbs_energy"}[quantity]
-    assert result[reference.id].relation == "equivalent"
-    assert all(gate.passed for gate in result["gates"] if gate.node == reference.id)
-    other_plan, other_record, _ = plan_for(None if quantity else "gibbs")
-    assert other_plan.hash != plan.hash
-    assert identity(plan, other_record, contexts)
-    if quantity:
-        thermal_node = next(node for node in plan.nodes if node.op == "thermochemistry")
-        thermal_node.params["temperature_K"] = 500.
-        assert identity(plan, record, contexts)
-
-
-@pytest.mark.parametrize("condition,value", [("temperature_K", 500.), ("pressure_Pa", 1e5),
-                                             ("thermal_model", "other"),
-                                             ("frequency_level", "other")])
-def test_mixed_thermal_conditions_are_rejected(condition, value):
-    from chemflow.domains.reactions import context_check
-
-    plan, _, _ = plan_for("gibbs")
-    registry = load_registry(["molecular", "reactions"])
-    contexts, _ = infer_context(plan, registry)
-    reference = next(node for node in plan.nodes if node.id == plan.references[0])
-    inputs = {port: dict(contexts[source]) for port, source in reference.inputs.items()}
-    inputs["thermo0"][condition] = value
-    issues = context_check(reference, inputs, {}, {node.id: node for node in plan.nodes})
-    assert any(issue.code == "CF-E011" and condition in issue.message for issue in issues)
-
-
-def test_frequency_level_and_geometry_are_checked():
-    plan, _, _ = plan_for("gibbs")
-    registry = load_registry(["molecular", "reactions"])
-    modes = [node for node in plan.nodes if node.op == "frequencies"]
-    modes[0].params["level"] = {"method": "uhf"}
-    assert any(issue.code == "CF-E011" and "frequency_level" in issue.message
-               for issue in check(plan, registry))
-    modes[0].inputs["molecule"] = modes[1].inputs["molecule"]
-    assert any(issue.code == "CF-E011" and "geometry" in issue.message
-               for issue in check(plan, registry))
-
-
-def test_candidates_keep_thermal_corrections():
-    plan, _, _ = plan_for("gibbs")
-    expanded, identifiers = Orchestrator._candidate_plan(
-        plan, [{"template": "sci", "select_cutoff": .001}])
-    assert identifiers
-    node = next(node for node in expanded.nodes if node.id in identifiers.values())
-    reference = next(node for node in plan.nodes if node.id == plan.references[0])
-    for port in ("thermo0", "thermo1"):
-        assert node.inputs[port] == reference.inputs[port]
-    assert not check(expanded, load_registry(["molecular", "reactions"]))
-
-
 @pytest.mark.parametrize("quantity,label", [("enthalpy", "ΔH(298.15 K)"),
                                            ("gibbs", "ΔG(298.15 K, 1 atm)")])
 def test_agent_cli_thermal_reaction(tmp_path, quantity, label):
@@ -183,15 +102,3 @@ def test_atomic_electronic_degeneracy():
     assert result["spin_multiplicity"] == 2
     assert result["zpe"] == 0.
     assert result["h_corr"] / result["u_corr"] == pytest.approx(5 / 3)
-
-
-def test_default_operator_parameters():
-    with build.program("defaults") as builder:
-        model = builder.electronic_model(basis="sto-3g")
-        molecule = builder.node("geometry_optimize", model=model,
-                                molecule=builder.molecule("H 0 0 0; H 0 0 .74"))
-        modes = builder.node("frequencies", molecule=molecule, model=model)
-        result = builder.node("thermochemistry", molecule=molecule, model=model, frequencies=modes)
-    computed = Executor(load_registry(["molecular", "reactions"])).run(builder.to_ir())
-    assert computed[result.id]["temperature_K"] == 298.15
-    assert computed[result.id]["pressure_Pa"] == 101325.

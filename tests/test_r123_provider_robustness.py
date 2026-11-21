@@ -3,10 +3,10 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
+from llm_tools import QueryInput, ToolRegistry
 
 from chemflow.agent.journal import Journal
 from chemflow.agent.llm import FakeLLMClient, LLMPolicy
-from chemflow.agent.tools import QueryInput, ToolRegistry
 
 
 def test_default_retry_budget_exhaustion(tmp_path, monkeypatch):

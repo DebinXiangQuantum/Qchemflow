@@ -6,12 +6,11 @@ from pathlib import Path
 import numpy as np
 from pydantic import BaseModel
 
-from chemflow.diagnostics import AdapterError, Diagnostic
+from chemflow.diagnostics import AdapterError
 from chemflow.ids import content_hash
-from chemflow.registry import ImplementationSpec, RefinementRule
-from chemflow.runtime import ExecutionResult
+from chemflow.runtime.result import ExecutionResult
 
-from ._adapters import estimate, register_adapter
+from ._adapters import estimate
 
 
 class MMSystem(BaseModel, frozen=True):
@@ -58,28 +57,6 @@ def _check_region(topology, qm_atoms):
                 for left, right in topology.bonds())):
         raise AdapterError("CF-E022", None, "QM region must contain whole molecules",
                            "Select unique valid indices without cutting bonds")
-
-
-def static_check(program, registry):
-    nodes = {node.id: node for node in program.nodes}
-    issues = []
-    for node in program.nodes:
-        if node.op != "qmmm_energy":
-            continue
-        source = nodes.get(node.inputs.get("system"))
-        if source is None or source.op != "mm_system":
-            continue
-        try:
-            from openmm import app
-
-            pdb = source.params["pdb"]
-            text = pdb if "\n" in pdb else Path(pdb).read_text(encoding="utf-8")
-            _check_region(app.PDBFile(io.StringIO(text)).topology, node.params["qm_atoms"])
-        except AdapterError as exc:
-            issues.extend(issue.model_copy(update={"node": node.id}) for issue in exc.diagnostics)
-        except (ImportError, OSError, ValueError, TypeError, KeyError) as exc:
-            issues.append(Diagnostic(code="CF-E080", node=node.id, message=str(exc)))
-    return issues
 
 
 def qmmm_energy(store, system, positions_nm, qm_atoms, basis, method="rhf", cas=None,
@@ -132,95 +109,3 @@ def qmmm_energy(store, system, positions_nm, qm_atoms, basis, method="rhf", cas=
     return ExecutionResult(value, device=value.provenance.device,
                            cost=run.get("resources", {}),
                            job_ids=tuple(run.get("job_ids", [])))
-
-
-def _binding(method, solver, sampler=None):
-    def run(store, **parameters):
-        if parameters.get("method", method) != method or parameters.get("solver", solver) != solver:
-            raise ValueError("QM/MM parameters conflict with the solver binding")
-        parameters.update(method=method, solver=solver)
-        if sampler is not None:
-            options = dict(parameters.get("solver_options") or {})
-            if options.get("sampler", sampler) != sampler:
-                raise ValueError("QM/MM sampler conflicts with binding backend")
-            options["sampler"] = sampler
-            parameters["solver_options"] = options
-        return qmmm_energy(store, **parameters)
-    return run
-
-
-def _resources(solver, sampler):
-    def predict(solver_options=None, **parameters):
-        if solver != "sqd":
-            return {}
-        options = solver_options or {}
-        shots = options.get("shots", 4096)
-        if sampler == "lqcloud":
-            from chemflow.backends.lqcloud import LqcloudBackend
-
-            return LqcloudBackend().prediction(shots=shots)
-        return {"sim_shots": shots}
-    return predict
-
-
-def context_check(node, inputs, context, nodes):
-    if node.op == "mm_system":
-        context["system_id"] = content_hash(node.params)
-    elif node.op == "qmmm_energy":
-        parameters = dict(node.params)
-        if node.binding in BINDINGS:
-            method, solver, _, _ = BINDINGS[node.binding]
-            parameters.setdefault("method", method)
-            parameters.setdefault("solver", solver)
-        elif parameters.get("solver", "fci") != "fci":
-            return [Diagnostic(code="CF-E080", node=node.id,
-                message="Quantum/GPU QM/MM solvers require their explicit backend binding")]
-        try:
-            context.update(energy_keys(inputs["system"]["system_id"], **parameters),
-                           kind="qmmm_total_energy", unit="hartree")
-        except (TypeError, ValueError, KeyError) as exc:
-            return [Diagnostic(code="CF-E080", node=node.id, message=str(exc))]
-    return []
-
-
-BINDINGS = {
-    "qmmm_rhf": ("rhf", "fci", None, "cpu_numeric"),
-    "qmmm_casci": ("casci", "fci", None, "cpu_numeric"),
-    "qmmm_sqd_statevector": ("casci", "sqd", "statevector", "quantum_simulator"),
-    "qmmm_sqd_aer": ("casci", "sqd", "aer_noisy", "quantum_simulator"),
-    "qmmm_sqd_gpu": ("casci", "sqd", "gpu", "quantum_simulator"),
-    "qmmm_sqd_qpu": ("casci", "sqd", "lqcloud", "qpu"),
-    "qmmm_gpu_fci": ("casci", "gpu_fci", None, "gpu_numeric"),
-}
-
-
-def relation(node):
-    method, solver = node.params.get("method", "rhf"), node.params.get("solver", "fci")
-    if node.binding in BINDINGS:
-        method, solver, _, _ = BINDINGS[node.binding]
-    return ("variational_upper_bound" if method == "rhf" or solver == "sqd" else
-            "equivalent")
-
-
-def register(registry):
-    register_adapter(registry, "mm_system", mm_system, {}, "mm_system",
-        ("pdb", "forcefields", "nonbonded"),
-        "Artifact-backed OpenMM System and PDB Topology; force-field parameters are not rebuilt.",
-        cacheable=False)
-    register_adapter(registry, "qmmm_energy", qmmm_energy, {"system": "mm_system"}, "estimate",
-        ("positions_nm", "qm_atoms", "basis", "method", "cas", "solver", "solver_options",
-         "charge", "spin"),
-        "Whole-molecule electrostatic QM/MM total energy; RHF upper bound or CASCI solver relation.")
-    registry.context_checks.append(context_check)
-    registry.checks.append(static_check)
-    for name, (method, solver, sampler, backend) in BINDINGS.items():
-        bound_relation = ("variational_upper_bound" if method == "rhf" or solver == "sqd"
-                          else "equivalent")
-        registry.register(RefinementRule(target="qmmm_energy", template_id=name,
-                                          relation=bound_relation))
-        registry.register(ImplementationSpec(id=name, version="1", target="qmmm_energy",
-            implements=name, adapter=_binding(method, solver, sampler), backend_kind=backend,
-            execution_role="verification_only" if backend == "quantum_simulator" else None,
-            params=registry.implementations["qmmm_energy"].params,
-            resource_model=_resources(solver, sampler),
-            effects="random" if solver == "sqd" else "pure"))

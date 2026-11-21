@@ -96,24 +96,6 @@ def test_hook_blocks_writes_to_protected_dirs_but_not_reads_or_unrelated_files(t
     assert pre("Bash", {"command": f"echo x > {protected / 'task.json'}"}) == 2
 
 
-def test_hook_journal_stays_out_of_user_projects(tmp_path) -> None:
-    project = tmp_path / "project"
-    project.mkdir()
-    home = tmp_path / "home"
-    home.mkdir()
-    for tool, tool_input in (("Bash", {"command": "ls"}),
-                             ("mcp__plugin_chemflow_chemflow-designer__run",
-                              {"plan_id": "p", "scale": "screen"})):
-        _hook({"hook_event_name": "PostToolUse", "tool_name": tool, "tool_input": tool_input,
-               "session_id": "s", "cwd": str(project)}, home=home)
-    assert not list(project.iterdir())
-    journals = list((home / ".chemflow").rglob("*journal*"))
-    assert journals
-    text = "".join(path.read_text() for path in journals if path.is_file())
-    assert '"run"' in text or "run" in text
-    assert "Bash" not in text
-
-
 def test_role_subagents_have_meaningful_descriptions(tmp_path) -> None:
     out = _build("claude-code", tmp_path)
     for agent in (out / "agents").glob("*.md"):

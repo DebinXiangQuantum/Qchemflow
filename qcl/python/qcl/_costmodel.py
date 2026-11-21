@@ -111,6 +111,8 @@ def heuristic(nodes: list[dict[str, Any]], node: dict[str, Any]) -> float:
     if operation == "classical.solve":
         power = {"hf": 3, "mp2": 5, "ccsd": 6, "ccsd_t": 7}.get(params.get("method"), 6)
         return 0.05 + 1e-7 * orbitals ** power
+    if operation == "synthesis.routes":
+        return float(params.get("time_limit_s", 120))
     if operation in ("fci.solve", "ed.ground_state", "sci.solve"):
         return 0.05 + 2e-6 * determinants * orbitals ** 2
     if operation == "sqd.diagonalize":

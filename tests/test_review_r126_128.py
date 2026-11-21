@@ -35,11 +35,7 @@ from __future__ import annotations
 import json
 
 import pytest
-import test_review_m4a as m4a
-from test_review_r114_118 import Scripted, _base, _results, _turn
-
-from chemflow.agent.journal import Journal
-from chemflow.agent.llm import LLMPolicy
+from test_review_r114_118 import Scripted
 
 BATCH = [{"template": "sqd", "select_cutoff": None, "shots": 1024},
          {"template": "sqd", "select_cutoff": None, "shots": 2048}]
@@ -68,53 +64,6 @@ def _eval_full(tmp_path, monkeypatch, tasks, script=None, policy="glm"):
 
 
 # R126 ----------------------------------------------------------------------------------------
-
-def test_r126_a_verified_decline_is_the_budget_refusal(tmp_path, monkeypatch) -> None:
-    def script(call, messages):
-        if call == 1:
-            return _turn([("plan.candidates", {"plan_id": _base(messages),
-                                               "candidates": BATCH})])
-        batch = [data for name, data in _results(messages) if name == "plan.candidates"][-1]
-        return _turn([("design.decline", {
-            "reason": "The 1024+2048-shot batch needs 3072 simulator shots; the budget is 2048.",
-            "plan_id": batch["plan_id"]})])
-
-    rows, journal = _eval_full(tmp_path, monkeypatch, "refuse-sim-shots", script)
-    row = rows["refuse-sim-shots"]
-    assert row["decision"] == "refused" and row["refusal_code"] == "CF-E070", row
-    assert row["correct"] and row["completed"]
-    states = [entry["state"] for entry in journal("refuse-sim-shots")]
-    assert "SCREEN" not in states  # nothing of the batch ran
-
-
-def test_r126_a_false_budget_claim_is_rejected_and_the_turn_continues(tmp_path,
-                                                                      monkeypatch) -> None:
-    affordable = [{"template": "sci", "select_cutoff": 0.01, "shots": None}]
-
-    def script(call, messages):
-        if call == 1:
-            return _turn([("plan.candidates", {"plan_id": _base(messages),
-                                               "candidates": affordable})])
-        built = [data for name, data in _results(messages) if name == "plan.candidates"][-1]
-        if call == 2:
-            return _turn([("design.decline", {"reason": "Too expensive.",
-                                              "plan_id": built["plan_id"]})])
-        if call == 3:  # R142: unscreened affordable candidates block a silent decline
-            return _turn([("design.decline", {"reason": "Classical controls suffice.",
-                                              "plan_id": None})])
-        return _turn([("design.decline", {"reason": "Classical controls suffice.",
-                                          "plan_id": None, "force": True})])
-
-    rows, journal = _eval_full(tmp_path, monkeypatch, "refuse-sim-shots", script)
-    entries = journal("refuse-sim-shots")
-    declines = [entry["decision"] for entry in entries if entry["state"] == "LLM_TOOL" and
-                entry["decision"].get("name") == "design.decline"]
-    assert "error" in declines[0] and "budget" in json.dumps(declines[0]["error"]).lower()
-    assert "error" in declines[1] and "force" in json.dumps(declines[1]["error"])
-    assert "result" in declines[2]
-    assert any(entry["state"] == "DESIGN_DECLINED" for entry in entries)
-    row = rows["refuse-sim-shots"]
-    assert row["decision"] != "refused" and not row["correct"]  # the batch was never refused
 
 
 # R127 ----------------------------------------------------------------------------------------
@@ -178,25 +127,3 @@ def _reminders(messages):
             if message.get("role") == "user" and "turn" in str(message.get("content")).lower()
             and ("design.submit" in str(message.get("content")) or
                  "model.choose" in str(message.get("content")))]
-
-
-@pytest.mark.parametrize("role,tool", [("designer", "design.submit"),
-                                       ("modeler", "model.choose")])
-def test_r128_the_last_two_turns_are_announced(tmp_path, role, tool) -> None:
-    client = Scripted(lambda call, messages: _turn([("cards.search", {"query": "sqd"})]))
-    LLMPolicy(role, client, m4a._tools(), journal=Journal(tmp_path / "j.jsonl"),
-              max_turns=5).decide({})
-    assert len(client.messages) == 5
-    for index, messages in enumerate(client.messages, start=1):
-        reminders = _reminders(messages)
-        if index <= 3:
-            assert not reminders, index
-        else:
-            assert reminders and tool in reminders[-1], index
-
-
-def test_r128_roles_without_terminal_tools_get_no_reminder(tmp_path) -> None:
-    client = Scripted(lambda call, messages: _turn([("cards.search", {"query": "sqd"})]))
-    LLMPolicy("critic", client, m4a._tools(), journal=Journal(tmp_path / "j.jsonl"),
-              max_turns=4).decide({})
-    assert all(not _reminders(messages) for messages in client.messages)

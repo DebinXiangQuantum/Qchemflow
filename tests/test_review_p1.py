@@ -4,7 +4,6 @@ Threat model: in Claude Code / Codex / Goose / Hermes the agent has a shell runn
 OS user as the tool server. Anything the server can read, the agent can read. Verification must
 therefore need only public material; signing keys are passphrase-encrypted and held by humans.
 """
-import inspect
 
 import pytest
 
@@ -59,37 +58,3 @@ def test_agent_with_read_access_cannot_forge() -> None:
     edited = genuine.model_copy(update={"spec": loose})
     with pytest.raises(CheckError):
         TaskVerifier(public_pem).verify(edited)
-
-
-def test_tool_server_needs_no_secret(monkeypatch, tmp_path) -> None:
-    pytest.importorskip("mcp")
-    from chemflow.mcp import create_server
-    from chemflow.signing import TaskSigner
-
-    parameters = set(inspect.signature(create_server).parameters)
-    assert not {"secret", "secret_file", "passphrase"} & parameters
-    assert "public_key" in parameters
-    monkeypatch.delenv("CHEMFLOW_TASK_SECRET", raising=False)
-    private_pem, public_pem = _keys()
-    record = TaskSigner(private_pem, b"human passphrase").freeze(
-        TaskSpec.model_validate(SPEC), "alice")
-    task = tmp_path / "task.json"
-    task.write_text(record.model_dump_json())
-    key = tmp_path / "human.pub"
-    key.write_bytes(public_pem)
-    assert create_server("designer", str(task), public_key=str(key)) is not None
-
-
-def test_run_schema_has_no_approval_gate() -> None:
-    """Revised for R1: QPU use is budgeted like any device; no approvals exist."""
-    from chemflow.agent.task import TaskStore
-    from chemflow.agent.tools import make_tools
-    from chemflow.ops.molecular import molecular_registry
-    from chemflow.runtime import Executor
-
-    store = TaskStore("legacy-test-store")
-    record = store.freeze(TaskSpec.model_validate(SPEC), "alice")
-    tools = make_tools(molecular_registry(), Executor(molecular_registry()), record, store)
-    run = next(item for item in tools.schemas("designer") if item["name"] == "run")
-    properties = run["parameters"]["properties"]
-    assert "approval_id" not in properties and "approval" not in properties

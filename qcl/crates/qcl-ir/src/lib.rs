@@ -45,6 +45,8 @@ pub enum ValueType {
     Comparison,
     Hessian,
     ReactionPath,
+    /// A structured, model-defined result (a ligand filter verdict, synthesis routes).
+    Record,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

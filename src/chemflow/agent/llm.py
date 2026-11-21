@@ -8,66 +8,67 @@ import os
 import tempfile
 import time
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from chemflow.agent.critic import CriticDecision, decision_items, review
 from chemflow.agent.journal import Journal
 from chemflow.agent.llm_errors import is_quota, quota_reset
 from chemflow.agent.task import TaskRecord
-from chemflow.agent.tools import ToolRegistry
 from chemflow.diagnostics import CheckError
 from chemflow.text import cap_strings as _cap_strings
 
 CONTRACTS = {
     "planner": "Draft the question and gates; never freeze or execute the task.",
     "modeler": "Choose the model and active space; do not change frozen gates.",
-    "designer": "Compose and screen plans; checker and resource budget rules are mandatory.",
+    "designer": "Propose candidate methods for the screen; budget rules are mandatory.",
     "critic": "Challenge candidates against classical controls; never loosen gates.",
     "analyst": "Report relations, evidence, costs and limitations without overclaiming.",
 }
 FORBIDDEN = {"task", "task_record", "freeze", "gates", "gate", "evidence",
              "signature", "record_hash", "content_hash", "budget"}
-DESIGNER_PROMPT = (
-    "You are ChemFlow's designer. observation.base_plan_id holds the frozen task's controls "
-    "and screening reference; do not change them or the gates. Candidates must be built on "
-    "observation.base_plan_id; plans started with plan.new are refused. "
-    "vqe_sampled is deployable on MQ02 through vqe_lqcloud (vqe_shots_ideal at screen scale), "
-    "while statevector VQE remains verification-only. "
-    "Add candidates with plan.candidates: sci and sqd apply to ground_energy references "
-    "and componentwise to reaction_energy (including reaction barriers), ranking, pes_scan, "
-    "interaction_scan and bond_dissociation references. "
-    "Other reference kinds require composition with plan.add_node; mark candidate results "
-    "as targets with target=true. Use registry tools to inspect operators and bindings. "
-    "Retain the returned plan_id after each edit. Optionally check and run at scale=screen; "
-    "Pass capped text_sha256 objects back as plan parameter values to reuse exact frozen text. "
-    "Use algorithm.prove {plan_id, node_id} for a budgeted symbolic relation certificate "
-    "and independent kernel verdict before claiming a bound or equality. "
-    "Use algorithm.validity {plan_id, node_id} to map the signed domain and bar, and "
-    "algorithm.falsify {plan_id, node_id} to search for implementation/relation counterexamples; "
-    "a clean search is not a proof. "
-    "resource budget rules are mandatory. Finish with design.submit {plan_id} to screen that "
-    "plan, or design.decline {reason} to keep only the controls. Either ends your turn "
-    "on success. Decline with plan_id only to refuse a specific plan as unaffordable; "
-    "Submit identity-valid affordable candidates for screening rather than rejecting them from "
-    "other-system card evidence, or decline with force=true and a task-specific reason. "
-    "ChemFlow verifies the claim, and the run then ends as a budget refusal. "
-    "Never assert your own evidence or gates."
-)
-MODELER_PROMPT = (
-    "You are ChemFlow's modeler. Fixed active spaces are handled without consulting you. "
-    "For active=auto, inspect observation.diagnostics and finish with "
-    "model.choose {n_elec, n_orb, reason}. This ends your turn immediately. "
-    "Choose positive integer counts with at most 10 orbitals, no more than two electrons "
-    "per orbital, and electron/spin parity compatible with the frozen target. "
-    "If you do not choose or your choice is infeasible, the diagnostics' suggested_active "
-    "space is used. Free text is not a choice. Never change the frozen task or its gates."
-)
+# Role prompts on the QCL engine (chemflow.agent.qcl_tools supplies the tools).
+PROMPTS = {
+    "designer": (
+        "You are ChemFlow's designer on the QCL engine. The signed task, its gates and the "
+        "classical controls and exact reference are fixed; observation.controls holds their "
+        "graded results. Propose candidate methods that could meet the gates more cheaply or "
+        "with a stronger relation: sci {select_cutoff} or sqd {shots} (closed-shell "
+        "molecules only). Use methods.list for ranges, screen.review to compile a proposal "
+        "and see its inferred relations, predicted time and simulator shots, then finish "
+        "with design.submit {candidates} or design.decline {reason}. Either ends your turn. "
+        "Never assert evidence, relations or gates; ChemFlow grades every output."),
+    "modeler": (
+        "You are ChemFlow's modeler on the QCL engine. For an automatic active space, read "
+        "observation.diagnostics (or diagnose.model) and finish with model.choose "
+        "{n_elec, n_orb, reason}: positive counts, at most 10 orbitals, at most two "
+        "electrons per orbital, parity compatible with the molecule's spin. An infeasible "
+        "choice falls back to the diagnostics' suggested_active."),
+    "critic": (
+        "You are ChemFlow's critic. Challenge each candidate against the classical "
+        "controls using screen.controls and results.query; never loosen gates. The final "
+        "verdict is computed deterministically from the graded results."),
+    "planner": (
+        "You are ChemFlow's planner. The task is already signed by a human and cannot be "
+        "changed; read it with task.get and note anything the reviewer should know."),
+    "analyst": (
+        "You are ChemFlow's analyst. Read results.query and write a short report with "
+        "report.write: relations, gate verdicts, costs and limitations. Quote only recorded "
+        "energies; never claim advantage, speedup or certification."),
+}
 TERMINAL_TOOLS = {"designer": {"design.submit", "design.decline"}, "modeler": {"model.choose"}}
 DEFAULT_MAX_TURNS = 24
 
 
 class LLMClient(Protocol):
     def complete(self, messages: list[dict], tools: list[dict]) -> dict: ...
+
+
+class ToolRegistry(Protocol):
+    """Role-scoped tools (chemflow.agent.qcl_tools.QclToolRegistry)."""
+
+    def schemas(self, role: str) -> list[dict]: ...
+
+    def call(self, role: str, name: str, data: dict | None = None) -> Any: ...
 
 
 class FakeLLMClient:
@@ -208,16 +209,9 @@ class LLMPolicy:
                                    for card in value] if key == "cards" else
                                    _summary(value) if key == "diagnostics" else value)
                             for key, value in observation.items()}}
-        prompt = (getattr(self, "prompts", None) or {}).get(self.role) or {
-            "designer": DESIGNER_PROMPT, "modeler": MODELER_PROMPT}.get(self.role, (
+        prompt = (getattr(self, "prompts", None) or PROMPTS).get(self.role) or (
             f"You are ChemFlow's {self.role}. {CONTRACTS[self.role]}\n"
-            "Use the available tools for plan changes. Only screen runs are allowed. "
-            "Return a plan through a tool result; never assert your own evidence or gates."))
-        if self.role == "planner":
-            from chemflow.apps import catalog
-
-            prompt += "\nUse app.draft for unsigned drafts. Application catalogue:\n" + "\n".join(
-                f"{entry['id']}: {entry['description']}" for entry in catalog())
+            "Never assert your own evidence, relations or gates.")
         messages = [{"role": "system", "content": prompt},
             {"role": "user", "content": json.dumps(_cap_strings(context), sort_keys=True)}]
         outputs = []
@@ -283,8 +277,6 @@ class LLMPolicy:
                     args = _decode_arguments(args, allowed[name]["parameters"])
                     if (name.startswith("task.") and name != "task.get") or _forbidden(args):
                         raise PermissionError("Task, gates or evidence are immutable")
-                    if name == "run" and args.get("scale") != "screen":
-                        raise PermissionError("Only screening runs are permitted")
                     fields = allowed[name]["parameters"]["properties"]
                     if set(args) - set(fields):
                         raise ValueError("Unknown tool arguments")

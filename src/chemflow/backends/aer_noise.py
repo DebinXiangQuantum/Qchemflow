@@ -6,9 +6,8 @@ from qiskit_aer.noise import NoiseModel, ReadoutError, depolarizing_error, therm
 from chemflow.backends.calibration import best_layout
 from chemflow.backends.circuits import build_circuit, compile_native, memory_to_index
 from chemflow.diagnostics import AdapterError
-from chemflow.registry import ImplementationSpec
-from chemflow.runtime import ExecutionResult
-from chemflow.types import BackendKind, Samples
+from chemflow.runtime.result import ExecutionResult
+from chemflow.types import Samples
 
 
 def noise_model(calibration: dict, layout: list[int]) -> NoiseModel:
@@ -45,7 +44,9 @@ def noise_model(calibration: dict, layout: list[int]) -> NoiseModel:
     return noise
 
 
-def register_noisy_aer(registry, calibration: dict, identifier: str = "aer_noisy_mq02") -> None:
+def noisy_aer_sampler(calibration: dict):
+    """A configuration sampler that simulates the calibrated device's errors with Aer."""
+
     def sample(store, prep, shots, seed=0, **kwargs):
         if prep.circuit is None:
             raise AdapterError("CF-E080", None, "State has no hardware circuit",
@@ -60,10 +61,6 @@ def register_noisy_aer(registry, calibration: dict, identifier: str = "aer_noisy
                                   for bits, count in counts.items()}, shots=shots,
                           encoding_id=prep.encoding_id, basis="computational",
                           source="quantum_simulator", seed=seed, device=device)
-        return ExecutionResult(samples, device=device)
+        return ExecutionResult(samples, device=device, cost={"sim_shots": shots})
 
-    registry.register(ImplementationSpec(id=identifier, version="1", target="sample_configurations",
-        backend_kind=BackendKind.quantum_simulator, effects="random", adapter=sample,
-        execution_role="emulator", emulates="sample_configurations",
-        params=frozenset({"shots", "seed"}),
-        resource_model=lambda shots=None, **kwargs: {"sim_shots": shots}))
+    return sample

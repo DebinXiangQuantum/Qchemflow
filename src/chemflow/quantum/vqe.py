@@ -1,6 +1,5 @@
 """Finite-shot circuit VQE; hardware submissions retain backend reconciliation records."""
 
-from functools import partial
 from math import comb
 
 import numpy as np
@@ -10,27 +9,8 @@ from chemflow.diagnostics import AdapterError
 from chemflow.impls.jw import pauli_terms
 from chemflow.impls.lucj import LucjParams
 from chemflow.quantum.pauli import estimate, qwc_groups
-from chemflow.registry import ImplementationSpec, RefinementRule
-from chemflow.relations import TargetRelation
 from chemflow.runtime.result import ExecutionResult
 from chemflow.types import CircuitSpec, StatePrep
-
-
-def resources(max_evaluations=60, shots_per_group=1024, n_groups=None,
-              sampler="ideal", backend=None, **kwargs):
-    shots = None if n_groups is None else max_evaluations * n_groups * shots_per_group
-    seconds = 0
-    if sampler == "lqcloud":
-        if backend is None:
-            from chemflow.backends.lqcloud import LqcloudBackend
-
-            backend = LqcloudBackend()
-        prediction = backend.prediction(shots=shots_per_group)
-        seconds = (None if n_groups is None or prediction.get("qpu_s") is None else
-                   max_evaluations * n_groups * prediction["qpu_s"])
-    return {"qpu_shots": shots if sampler == "lqcloud" else 0,
-            "sim_shots": 0 if sampler == "lqcloud" else shots,
-            "qpu_s": seconds, "gpu_s": 0}
 
 
 def sampled_vqe(store, hamiltonian, sector, ansatz="uccsd", optimizer="cobyla",
@@ -170,19 +150,3 @@ def sampled_vqe(store, hamiltonian, sector, ansatz="uccsd", optimizer="cobyla",
                    "evaluation": "shots"}
     return ExecutionResult((final["energy"], diagnostics, {"stat_err": final["stat_err"]}),
         cost=cost, job_ids=tuple(job_ids), device=bound_sampler)
-
-
-def register_sampled_vqe(registry, backend=None):
-    registry.register(RefinementRule(target="ground_energy", template_id="vqe_sampled",
-                                     relation=TargetRelation.stochastic_estimate))
-    for binding, sampler in (("vqe_shots_ideal", "ideal"), ("vqe_aer_mq02", "aer_mq02"),
-                             ("vqe_lqcloud", "lqcloud")):
-        hardware = sampler == "lqcloud"
-        registry.register(ImplementationSpec(id=binding, version="1", target="ground_energy",
-            implements="vqe_sampled", backend_kind="qpu" if hardware else "quantum_simulator",
-            execution_role="qpu" if hardware else "emulator",
-            emulates=None if hardware else "ground_energy", effects="random",
-            adapter=partial(sampled_vqe, bound_sampler=sampler, backend=backend),
-            params=frozenset({"ansatz", "optimizer", "max_evaluations", "shots_per_group",
-                              "seed", "sampler", "s", "total_spin", "n_groups"}),
-            resource_model=partial(resources, sampler=sampler, backend=backend)))

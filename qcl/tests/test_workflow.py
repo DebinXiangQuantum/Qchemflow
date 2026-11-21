@@ -78,6 +78,7 @@ def test_unset_cpu_budget_preserves_existing_plan_hash():
 def test_cpu_budget_does_not_mislabel_unrelated_worker_crash(monkeypatch):
     plan = rhf_energy.compile(qcl.Molecule("H 0 0 0; H 0 0 0.74", "sto-3g"),
                               qcl.Device("cpu0", "cpu"), budget=qcl.Budget(cpu_core_s=100))
+    monkeypatch.setenv("QCL_WARM_WORKER", "0")  # the crash is simulated in a cold worker
     monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs:
                         subprocess.CompletedProcess(args, -11, "", "segmentation fault"))
     with pytest.raises(RuntimeError, match="worker failed: segmentation fault"):

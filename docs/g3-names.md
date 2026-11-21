@@ -1,5 +1,11 @@
 # Molecule names (G3)
 
+> **Status (2026-11-21).** This guide records a milestone built on ChemFlow's earlier
+> engine (IR programs, registry operators, static checker and orchestrator), which has
+> been removed. The science and the validation below still hold; signed tasks now run as
+> QCL screens, and the operations named here map to QCL primitives or plain kernels as
+> listed in [legacy-retirement.md](legacy-retirement.md).
+
 Load the `drug` pack and add `ligands_from_names` with `names=["aspirin"]`.
 Its `LigandLibrary` works with the existing filters, descriptors, conformers and
 docking operators. Names are ambiguous: **check the returned PubChem CID** before

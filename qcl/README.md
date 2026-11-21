@@ -239,15 +239,16 @@ chemflow agent run --task task.json --public-key public.pem \
   --program qcl/apps/agent_h2.py --out qcl-run
 ```
 
-For supported signed tasks, the Agent can construct a QCL workflow directly:
+For supported signed tasks, the Agent can also run the task's single built-in QCL
+workflow instead of a screen:
 
 ```sh
 chemflow agent run --task task.json --public-key public.pem \
-  --engine qcl --out qcl-run
+  --builtin --out qcl-run
 ```
 
 For a fixed-active-space HF ground task with a signed numerical gate,
-`--engine qcl --screen` runs HF, PySCF FCI and (within its determinant limit)
+`--screen` runs HF, PySCF FCI and (within its determinant limit)
 native Rust CI candidates under one cumulative resource allowance. It writes
 `qcl-screen.json` with each gate result and measured cost, selects the least
 costly gate-passing candidate, and records the selected result and ledger.
@@ -276,8 +277,6 @@ scoring, MM/GBSA binding, connected electronic or RRHO reaction barriers,
 periodic KRHF and exact impurity spectral densities.
 MM/GBSA and reaction barrier built-in plans have signed compile checks; their
 real-input execution remains dependent on the corresponding engine setup.
-The legacy Agent remains the default for its broader candidate-selection
-contract; QCL execution is selected explicitly with `--engine qcl`.
 
 `build(task_spec, cluster)` in the program returns `(workflow, args, kwargs)`.
 The agent writes `qcl-review.json`, `journal.jsonl` and `summary.json`, then
@@ -444,8 +443,8 @@ figures and tables.
 
 ## Signed tasks run as QCL screens
 
-`chemflow agent run` compiles a human-signed ChemFlow task into QCL and runs it; this is
-the default engine for every application in `chemflow app list`:
+`chemflow agent run` compiles a human-signed ChemFlow task into QCL and runs it, for every
+application in `chemflow app list` (QCL is ChemFlow's only engine):
 
 ```sh
 chemflow app draft ground_state_energy --example --out drafts
@@ -473,3 +472,13 @@ and writes `qcl-review.json`; `--builtin` runs the task's single built-in progra
 instead; `--policy openai|anthropic|glm` drives the modeler, designer, critic and analyst
 roles through typed QCL tools (`chemflow.agent.qcl_tools`). External agents use the same
 tools through the MCP server's `qcl` profile.
+
+The scientific operations of ChemFlow's earlier domain packs are QCL primitives:
+`qcl.qmmm.energy` (electrostatic QM/MM), `qcl.embedding.ewf` (embedded wave-function
+theory), `qcl.drug.descriptors` and `qcl.drug.filter` (RDKit ligand screens) and
+`qcl.synthesis.routes` (AiZynthFinder). `chemflow bench list` and
+`chemflow bench run <pack> <name>` compare QCL plans with independent oracles.
+
+CPU plans run in workers forked from a pre-warmed server (`qcl._zygote`), so a plan does
+not pay the interpreter and import start-up; set `QCL_WARM_WORKER=0` to start a cold
+worker per plan.

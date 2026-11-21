@@ -43,7 +43,7 @@ def _op_sample(ctx, node, identifier, operation, inputs):
     request = ctx.request
     qpu_backend_factory = ctx.qpu_backend_factory
     from chemflow.ids import content_hash
-    from chemflow.ops.molecular import prepare_sector_state
+    from chemflow.impls.prepare import prepare_sector_state
     from chemflow.types import CircuitSpec, Samples, StatePrep
 
     device = node["device"]
@@ -129,9 +129,9 @@ def _op_sample(ctx, node, identifier, operation, inputs):
         implementation = "sample/qiskit-statevector"
         resources = {"sim_shots": shots}
     elif simulator_host is not None and simulator_host.startswith("gpu"):
-        from chemflow.backends.gpu import catalogue
+        from chemflow.backends.gpu import gpu_sample
 
-        computed = catalogue()["statevector_cupy"].adapter(store, prep, shots, seed)
+        computed = gpu_sample(store, prep, shots, seed)
         samples = computed.value
         implementation = "sample/chemflow-cupy-statevector"
         resources = computed.cost
@@ -202,7 +202,7 @@ def _op_estimate_quantum(ctx, node, identifier, operation, inputs):
 
     from chemflow.backends.circuits import build_circuit
     from chemflow.diagnostics import AdapterError
-    from chemflow.ops.molecular import prepare_sector_state
+    from chemflow.impls.prepare import prepare_sector_state
     from chemflow.quantum.pauli import estimate as pauli_estimate
     from chemflow.quantum.pauli import qwc_groups
     from chemflow.types import CircuitSpec, StatePrep

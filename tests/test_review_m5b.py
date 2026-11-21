@@ -10,10 +10,6 @@ import numpy as np
 import pytest
 from pyscf import ao2mo, fci, gto, mcscf, scf
 
-from chemflow import build
-from chemflow.ops.molecular import molecular_registry
-from chemflow.runtime import Executor
-
 
 def _integrals(atoms: str, basis: str, ncas: int, nelecas: int, spin: int = 0):
     molecule = gto.M(atom=atoms, basis=basis, spin=spin, verbose=0)
@@ -68,73 +64,3 @@ def _cuda() -> bool:
     from chemflow.backends.gpu import cuda_available
 
     return cuda_available()
-
-
-def test_gpu_bindings_refuse_to_register_without_cuda() -> None:
-    from chemflow.backends.gpu import register_gpu
-
-    if _cuda():
-        pytest.skip("CUDA present; covered by the A100 tests")
-    with pytest.raises(RuntimeError):
-        register_gpu(molecular_registry())
-
-
-@pytest.mark.parametrize("atoms,total_spin", [("N 0 0 0; N 0 0 1.1", 0),
-                                              ("O 0 0 0; O 0 0 1.21", 0),
-                                              ("O 0 0 0; O 0 0 1.21", 1)])
-def test_gpu_fci_matches_cpu_fci_with_an_honest_label(atoms, total_spin) -> None:
-    if not _cuda():
-        pytest.skip("needs CUDA (run on the A100)")
-    from chemflow.backends.gpu import register_gpu
-
-    registry = molecular_registry()
-    register_gpu(registry)
-    with build.program("gpu-fci") as builder:
-        model = builder.electronic_model(basis="cc-pvdz")
-        hamiltonian = builder.hamiltonian(builder.molecule(atoms), model,
-                                          active={"n_elec": 8, "n_orb": 8})
-        sector = builder.sector(n_alpha=4, n_beta=4, n_orb=8)  # Ms=0; spin by root search
-        nodes = {}
-        for binding in ("fci_pyscf", "fci_cupy"):
-            node = builder.ground_energy(hamiltonian, sector, s=total_spin)
-            builder.refine(node, "fci")
-            builder.bind(node, binding)
-            nodes[binding] = node
-    result = Executor(registry).run(builder.to_ir())
-    cpu, gpu = (result[nodes[name].id] for name in ("fci_pyscf", "fci_cupy"))
-    assert gpu.value.value == pytest.approx(cpu.value.value, abs=1e-8)
-    assert gpu.relation == cpu.relation == "equivalent"
-    assert gpu.provenance.backend_kind == "gpu_numeric"
-    assert gpu.provenance.device.startswith("cuda:")
-    assert result["costs"][nodes["fci_cupy"].id].gpu_s > 0
-    assert gpu.diagnostics["s2"] == pytest.approx(total_spin * (total_spin + 1), abs=1e-5)
-
-
-def test_gpu_sampler_reproduces_the_state_distribution() -> None:
-    if not _cuda():
-        pytest.skip("needs CUDA (run on the A100)")
-    from chemflow.backends.gpu import register_gpu
-    from chemflow.impls.fci import sector_states
-
-    registry = molecular_registry()
-    register_gpu(registry)
-    with build.program("gpu-sample") as builder:
-        model = builder.electronic_model(basis="sto-3g")
-        hamiltonian = builder.hamiltonian(builder.molecule("Li 0 0 0; H 0 0 1.6"), model,
-                                          active={"n_elec": 2, "n_orb": 3})
-        sector = builder.sector(n_alpha=1, n_beta=1, n_orb=3)
-        prep = builder.node("prepare_state", hamiltonian=hamiltonian, sector=sector,
-                            ansatz="lucj", init="random", seed=4)
-        samples = builder.node("sample_configurations", prep=prep, shots=40000, seed=9)
-        builder.bind(samples, "statevector_cupy")
-    executor = Executor(registry)
-    result = executor.run(builder.to_ir())
-    drawn = result[samples.id]
-    assert drawn.source == "quantum_simulator" and drawn.device.startswith("cuda:")
-    state = executor.store.get(result[prep.id].state_ref)
-    exact = {str(bits): float(abs(amplitude) ** 2)
-             for bits, amplitude in zip(sector_states(result[prep.id].sector), state)}
-    observed = {key: count / drawn.shots for key, count in drawn.counts.items()}
-    distance = 0.5 * sum(abs(exact.get(key, 0) - observed.get(key, 0))
-                         for key in set(exact) | set(observed))
-    assert distance < 0.02

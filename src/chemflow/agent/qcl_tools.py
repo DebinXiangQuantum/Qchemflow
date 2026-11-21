@@ -97,7 +97,7 @@ def _strict_schema(model: type[BaseModel]) -> dict:
 
 
 class QclToolRegistry:
-    """The same interface as the legacy registry: ``schemas(role)`` and ``call``."""
+    """Role-scoped tools with strict input schemas: ``schemas(role)`` and ``call``."""
 
     def __init__(self) -> None:
         self._tools: dict[str, tuple[Callable, frozenset[str], type[BaseModel]]] = {}

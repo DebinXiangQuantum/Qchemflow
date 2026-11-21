@@ -33,7 +33,7 @@ CANDIDATE_ROUNDS = (
     (("sci", 1e-4), ("sqd", 4096), ("sqd", 8192)),
 )
 SQD_SEED = 11
-# Screening-scale SQD: two subsamples and two recovery rounds (the legacy candidate).
+# Screening-scale SQD: two subsamples and two recovery rounds.
 SQD_BATCHES = 2
 SQD_ITERATIONS = 2
 FCI_MAX_DETERMINANTS = 250_000
@@ -85,7 +85,7 @@ def entry_name(method: str, value: Any = None) -> str:
     return method if value is None else f"{method}-{value:g}"
 
 
-# The method cards the scripted designer chooses from (as chemflow/cards/data).
+# The method cards the scripted designer chooses from.
 CARDS = ({"id": "sci_pyscf", "template": "sci", "target": "chemflow.ground_energy@1"},
          {"id": "sqd_lucj", "template": "sqd", "target": "chemflow.ground_energy@1"},
          {"id": "pairing_sqd", "template": "pairing_sqd",
@@ -150,7 +150,7 @@ def _determinants(n_orb: int, n_alpha: int, n_beta: int) -> int:
 
 
 def _work(method: str, n_orb: int, n_alpha: int, n_beta: int) -> int | None:
-    """Reproducible asymptotic solver-work proxy (as chemflow.agent.report)."""
+    """Reproducible asymptotic solver-work proxy used to compare method costs."""
     powers = {"hf": 3, "mp2": 5, "ccsd": 6, "ccsd_t": 7}
     if method in powers:
         return n_orb ** powers[method]

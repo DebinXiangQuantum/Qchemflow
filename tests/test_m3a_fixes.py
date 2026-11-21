@@ -2,7 +2,6 @@ import pytest
 
 from chemflow.agent.critic import review
 from chemflow.agent.policies import ScriptedPolicy
-from chemflow.agent.report import ReportLintError, lint_report, write_report
 from chemflow.agent.task import TaskSpec
 
 
@@ -31,15 +30,3 @@ def test_revision_changes_hyperparameters_or_exhausts():
     assert second and all(candidate not in first for candidate in second)
     assert designer.decide({"cards": cards, "attempted": first + second}) == {
         "candidates": []}
-
-
-def test_report_claims_are_scoped_to_generated_headline():
-    headline = {"node": "ref", "value": "-1 hartree", "relation": "equivalent",
-                "evidence": "computed", "gate_verdict": "PASS", "cost": {},
-                "backend_kind": "cpu_numeric", "screening_reference": True}
-    report = write_report("screen", "stop", "use classical", [headline])
-    assert "exact reference available only at screening scale" in report
-    with pytest.raises(ReportLintError, match="exact"):
-        lint_report(report + "The SQD result is exact.\n", [headline])
-    with pytest.raises(ReportLintError, match="exact"):
-        write_report("screen", "stop", "exact", [{**headline, "relation": "approximate"}])

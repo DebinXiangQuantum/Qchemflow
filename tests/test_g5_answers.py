@@ -143,14 +143,12 @@ def test_fake_good_and_bad_designers_choose_candidate_and_control_answers(tmp_pa
 
         def complete(self, messages, tools):
             if messages[-1]["role"] == "tool":
-                assert json.loads(messages[-1]["content"])["result"]["data"]["plan_id"]
-                return {"content": "Candidate plan ready", "tool_calls": []}
-            context = json.loads(messages[-1]["content"])
+                assert json.loads(messages[-1]["content"])["result"]["data"]["plan_hash"]
+                return {"content": "Candidate submitted", "tool_calls": []}
             candidate = ({"template": "sci", "select_cutoff": 0.01}
                          if self.template == "sci" else {"template": "sqd", "shots": 1})
-            return {"content": "Candidate", "tool_calls": [{"name": "plan.candidates",
-                "arguments": {"plan_id": context["observation"]["base_plan_id"],
-                              "candidates": [candidate]}}]}
+            return {"content": "Candidate", "tool_calls": [{"name": "design.submit",
+                "arguments": {"candidates": [candidate]}}]}
 
     monkeypatch.setenv("CHEMFLOW_LIVE_LLM", "1")
     monkeypatch.setenv("OPENAI_API_KEY", "fake")

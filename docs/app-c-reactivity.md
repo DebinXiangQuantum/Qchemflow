@@ -1,5 +1,11 @@
 # APP C: bonds, reactivity, rankings and conformers
 
+> **Status (2026-11-21).** This guide records a milestone built on ChemFlow's earlier
+> engine (IR programs, registry operators, static checker and orchestrator), which has
+> been removed. The science and the validation below still hold; signed tasks now run as
+> QCL screens, and the operations named here map to QCL primitives or plain kernels as
+> listed in [legacy-retirement.md](legacy-retirement.md).
+
 The `reactivity` domain pack is included by `load_registry(pack_names())`. Install the
 `reactivity` extra for RDKit, FreeSASA, tblite and ASE. Execution is local and classical;
 there are no downloads, QPU jobs or sampling shots. Resource models explicitly report

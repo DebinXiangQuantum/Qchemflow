@@ -12,9 +12,7 @@ from scipy import constants as sc
 from chemflow.cache import cache_dir
 from chemflow.diagnostics import AdapterError
 from chemflow.domains.thermochemistry import ISOTOPE_MASSES
-from chemflow.registry import ImplementationSpec, OperatorSpec
 from chemflow.runtime.result import ExecutionResult
-from chemflow.types import BackendKind
 
 METHODS = ("gfn2-xtb", "mace-mp-0-small")
 DEFAULT_MACE_MODEL = str(cache_dir() / "mace" / "mace-mp-0-small.model")
@@ -146,25 +144,3 @@ def frequencies(molecule, method):
     modes = np.sign(eigenvalues) * np.sqrt(np.abs(eigenvalues) * factor) / (2 * np.pi * sc.c * 100)
     return {"freq_wavenumber": modes.tolist(), "n_imaginary": int(np.count_nonzero(modes < -50)),
             "max_gradient": float(np.max(np.abs(gradient))), "frequency_level": method}
-
-
-def context_check(node, inputs, context, nodes):
-    if node.op == "potential_energy":
-        method = node.params.get("method")
-        if method not in METHODS:
-            raise ValueError(f"Unsupported baseline method: {method}")
-        context.update(inputs.get("molecule", {}))
-        context.update(type="estimate", kind="potential_energy", unit="hartree",
-                       model_id=method, model_protocol_id=method)
-    return []
-
-
-def register(registry):
-    registry.register(OperatorSpec(id="chemflow.potential_energy", version=1,
-                      inputs={"molecule": "molecule"}, output="estimate",
-                      semantics="Classical potential energy; electronic-structure model change"))
-    registry.register(ImplementationSpec(id="potential_energy", version="1",
-                      target="potential_energy", adapter=potential_energy,
-                      backend_kind=BackendKind.cpu_numeric, params=frozenset({"method"}),
-                      cacheable=False))
-    registry.context_checks.append(context_check)

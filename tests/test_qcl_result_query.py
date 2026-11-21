@@ -1,5 +1,4 @@
 from chemflow.agent.memory import ResultsDB
-from chemflow.agent.tools import ResultsQueryInput
 
 
 def test_existing_result_queries_can_find_qcl_runs():
@@ -20,5 +19,3 @@ def test_existing_result_queries_can_find_qcl_runs():
     assert database.query(target_kind="molecular_ground_energy") == [row]
     assert database.query(operator="ground_energy") == []
     assert database.query() == [row]
-    assert ResultsQueryInput.model_validate({
-        "record_hash": "signed-task", "target_kind": "molecular_ground_energy"})

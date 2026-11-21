@@ -9,7 +9,7 @@ ChemFlow runtime and Agent integration it uses. The repository name is
 | Path | Purpose |
 | --- | --- |
 | `qcl/` | Python frontend, Rust compiler/runtime, device adapters, examples and tests |
-| `src/chemflow/` | Chemistry implementations, execution support, CLI, Agent and MCP server |
+| `src/chemflow/` | Chemistry kernels used by QCL, the signed-task Agent (QCL screens), CLI and MCP server |
 | `plugin/` | Source templates for Agent plugins, roles, skills and integrity hooks |
 | `examples/` | Small ChemFlow runtime examples used by the smoke checks |
 | `docs/spec/qcl-design.md` | QCL design specification and acceptance criteria |
@@ -50,17 +50,19 @@ generated run records.
 
 ## ChemFlow Agent and plugins
 
-The Agent accepts a signed ChemFlow task and a trusted public key. Select the
-QCL engine explicitly when running a reviewed QCL program:
+The Agent accepts a signed ChemFlow task and a trusted public key and compiles it
+into QCL screens: classical controls, candidate methods and the exact in-model
+reference in one plan per round, graded against the signed gates:
 
 ```bash
 .venv/bin/chemflow agent run \
   --task /path/to/signed-task.json \
   --public-key /path/to/public.pem \
-  --engine qcl \
-  --program qcl/apps/agent_h2.py \
   --out /path/to/run-output
 ```
+
+Add `--program qcl/apps/agent_h2.py` to run a reviewed, agent-authored QCL program
+instead. External agents drive the same screens through the `qcl` MCP profile.
 
 The `plugin/` directory is the single source for Agent roles, skills and
 hooks. Build an adapter for `codex`, `agent-plugins`, `claude-code`, `goose`,

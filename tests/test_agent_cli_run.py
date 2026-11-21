@@ -85,13 +85,12 @@ def test_live_policy_uses_injected_client(tmp_path, monkeypatch, provider):
     class Client:
         def complete(self, messages, tools):
             if messages[-1]["role"] == "tool":
-                assert json.loads(messages[-1]["content"])["result"]["data"]["plan_id"]
-                return {"content": "SCI plan ready", "tool_calls": []}
+                return {"content": "SCI submitted", "tool_calls": []}
             context = json.loads(messages[-1]["content"])
-            assert "plan.candidates" in {tool["name"] for tool in tools}
-            return {"content": "Screen SCI", "tool_calls": [{"name": "plan.candidates",
-                "arguments": {"plan_id": context["observation"]["base_plan_id"],
-                              "candidates": [{"template": "sci", "select_cutoff": 0.01}]}}]}
+            assert context["observation"]["controls"]
+            assert {"design.submit", "screen.review"} <= {tool["name"] for tool in tools}
+            return {"content": "Screen SCI", "tool_calls": [{"name": "design.submit",
+                "arguments": {"candidates": [{"template": "sci", "select_cutoff": 0.01}]}}]}
 
     def factory(provider, role, model):
         calls.append((provider, role, model))

@@ -4,17 +4,12 @@ import io
 
 import numpy as np
 
-from chemflow import build
 from chemflow.context import Context
-from chemflow.diagnostics import Diagnostic
 from chemflow.ids import content_hash
-from chemflow.registry import RefinementRule
 from chemflow.runtime.artifacts import read_text_artifact, write_text_artifact
 from chemflow.types import CostRecord, Estimate, Provenance
 from chemflow.units import Q
-from chemflow.verify.identity_diff import identity_hints, signature_tree
 
-from ._adapters import register_adapter
 from ._tools_client import call_tools
 
 
@@ -222,123 +217,3 @@ def fragment_interaction(complex, ligand, residues, level=None, basis="sto-3g",
             "ligand_atoms": ligand_atoms, "residue_atoms": residue_atoms, "formal_charges": charges,
             "approximation": "Pairwise-additive capped side-chain approximation; no many-body, "
                              "backbone, solvation or entropy terms; not binding free energy."}
-
-
-def resources(**kwargs):
-    return {"wall_s": None, "cpu_core_s": None, "gpu_s": 0, "sim_shots": 0,
-            "qpu_shots": 0, "qpu_s": 0}
-
-
-def validate_parameters(operation, parameters):
-    errors = []
-    for name in ("frames", "seed"):
-        if name in parameters and (type(parameters[name]) is not int or parameters[name] < 0):
-            errors.append(f"{name} must be a nonnegative integer")
-    for name in ("minimize", "remove_water", "counterpoise"):
-        if name in parameters and type(parameters[name]) is not bool:
-            errors.append(f"{name} must be a boolean")
-    for name in ("ph", "cutoff_A"):
-        if name in parameters:
-            value = parameters[name]
-            if (type(value) not in (int, float) or not np.isfinite(value) or
-                    (name == "ph" and not 0 <= value <= 14) or
-                    (name == "cutoff_A" and value <= 0)):
-                errors.append(f"Invalid {name}")
-    for name in ("keep", "chains", "residues"):
-        if name in parameters and (not isinstance(parameters[name], list) or
-                any(not isinstance(item, str) for item in parameters[name])):
-            errors.append(f"{name} must be a list of strings")
-    if "forcefield" in parameters and parameters["forcefield"] not in ("gaff-2.11", "openff-2.2.0"):
-        errors.append("Use gaff-2.11 or openff-2.2.0")
-    if "charge_method" in parameters and parameters["charge_method"] != "am1bcc":
-        errors.append("Only AM1-BCC charges are supported")
-    if "pdb_text" in parameters and not isinstance(parameters["pdb_text"], str):
-        errors.append("pdb_text must be a string")
-    if "source" in parameters:
-        source = parameters["source"]
-        if not isinstance(source, dict):
-            errors.append("Ligand source must be a dictionary")
-        elif (set(source) - {"pdb_text", "residue", "smiles", "sdf", "xyz", "charge"} or
-              not any(isinstance(source.get(name), str) and source[name]
-                      for name in ("pdb_text", "smiles", "sdf", "xyz"))):
-            errors.append("Ligand source requires PDB, SMILES, SDF or XYZ")
-    if "level" in parameters:
-        level = parameters["level"]
-        if (not isinstance(level, dict) or set(level) - {"method", "functional", "dispersion"} or
-                level.get("method", "hf") not in ("hf", "dft", "mp2") or level.get("dispersion")):
-            errors.append("Fragment level supports HF, DFT or MP2 without dispersion")
-    if "basis" in parameters and not isinstance(parameters["basis"], str):
-        errors.append("basis must be a string")
-    return errors
-
-
-def context_check(node, inputs, context, nodes):
-    if node.op == "mmgbsa":
-        context.update(kind="binding_free_energy", unit="kcal/mol",
-                       hamiltonian_id=content_hash({"inputs": inputs, "params": node.params}),
-                       relation="equivalent")
-    return []
-
-
-def base_plan(record, active=None):
-    if active is not None:
-        raise ValueError("MM/GBSA has no electronic active space")
-    target = record.spec.target
-    with build.program("binding-controls") as builder:
-        protein = builder.node("protein_structure", **target.receptor,
-                               ph=target.ph, keep=[], remove_water=True)
-        ligand = builder.node("ligand_structure", source=target.ligand["source"])
-        assembly = builder.node("complex", protein=protein, ligand=ligand)
-        parameters = builder.node("ligand_parameters", ligand=ligand,
-                                  forcefield=target.forcefield, charge_method="am1bcc")
-        arguments = {"complex": assembly, "parameters": parameters, "frames": target.frames,
-                     "minimize": target.minimize, "seed": target.seed}
-        control = builder.node("mmgbsa", **arguments)
-        reference = builder.node("mmgbsa", **arguments)
-        builder.ir.targets = [control.id, reference.id]
-        builder.ir.references = [reference.id]
-        return builder.to_ir(), [control.id]
-
-
-def identity(plan, record, contexts):
-    expected, _ = base_plan(record)
-    expected_signature = signature_tree(expected, expected.targets[0])
-    issues = []
-    for identifier in set(plan.targets + plan.references):
-        actual = signature_tree(plan, identifier)
-        valid = actual == expected_signature
-        if not valid:
-            issues.append(Diagnostic(code="CF-E120", node=identifier,
-                                     message="Binding target identity mismatch",
-                                     fix_hints=identity_hints(actual, [expected_signature])))
-    return issues
-
-
-def register(registry):
-    for name, adapter, inputs, output, parameters, description in (
-        ("protein_structure", protein_structure, {}, "protein_structure",
-         ("pdb_text", "ph", "keep", "remove_water", "chains"),
-         "PDBFixer protein preparation with recorded pH-dependent protonation"),
-        ("ligand_structure", ligand_structure, {}, "ligand_structure", ("source",),
-         "RDKit ligand bond orders, formal charge and coordinate-bearing explicit hydrogens"),
-        ("complex", complex, {"protein": "protein_structure", "ligand": "ligand_structure"},
-         "protein_ligand_complex", (), "Assemble prepared protein and ligand without moving the pose"),
-        ("pocket", pocket, {"complex": "protein_ligand_complex"}, "binding_pocket", ("cutoff_A",),
-         "Protein residues within the declared angstrom cutoff of any ligand atom"),
-        ("ligand_parameters", ligand_parameters, {"ligand": "ligand_structure"}, "ligand_parameters",
-         ("forcefield", "charge_method"), "GAFF2 or OpenFF AM1-BCC ligand force-field parameters"),
-        ("mmgbsa", mmgbsa, {"complex": "protein_ligand_complex", "parameters": "ligand_parameters"},
-         "estimate", ("frames", "minimize", "seed"),
-         "Model-defined binding_free_energy: Amber14/GBn2 MM/GBSA; model_change to experiment"),
-        ("fragment_interaction", fragment_interaction,
-         {"complex": "protein_ligand_complex", "ligand": "ligand_structure"}, "fragment_interaction",
-         ("residues", "level", "basis", "counterpoise"),
-         "Pairwise-additive ligand side-chain PySCF counterpoise interaction; not binding free energy"),
-    ):
-        register_adapter(registry, name, adapter, inputs, output, parameters, description)
-        registry.implementations[name].resource_model = resources
-    registry.register(RefinementRule(target="mmgbsa", template_id="binding_mmgbsa",
-                                     relation="equivalent"))
-    registry.register(RefinementRule(target="fragment_interaction", template_id="binding_fragment_qm",
-                                     relation="approximate"))
-    registry.context_checks.append(context_check)

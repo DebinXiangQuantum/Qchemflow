@@ -7,12 +7,12 @@ from types import SimpleNamespace
 import numpy as np
 from pyscf import ao2mo, fci
 
+from chemflow.impls.prepare import prepare_sector_state
 from chemflow.impls.sqd import sqd_sector
 from chemflow.impls.statevector import sample_configurations
-from chemflow.ops.molecular import prepare_sector_state
-from chemflow.registry import Registry
-from chemflow.runtime import ArtifactStore, BudgetLedger, ExecutionResult
-from chemflow.runtime.budget import RESOURCE_DIMENSIONS, resource_defaults
+from chemflow.runtime.artifacts import ArtifactStore
+from chemflow.runtime.budget import RESOURCE_DIMENSIONS, BudgetLedger, resource_defaults
+from chemflow.runtime.result import ExecutionResult
 from chemflow.types import CostRecord, Hamiltonian, Sector
 
 
@@ -117,20 +117,19 @@ class SQDSolver(fci.selected_ci.SelectedCI):
             self._pending = None
             self._repetition += 1
             return result
-        registry = Registry()
         if self.sampler == "aer_noisy":
-            from chemflow.backends.aer_noise import register_noisy_aer
+            from chemflow.backends.aer_noise import noisy_aer_sampler
             from chemflow.backends.calibration import load_calibration
 
-            register_noisy_aer(registry, self.calibration or load_calibration())
-            identifier = "aer_noisy_mq02"
+            sample = noisy_aer_sampler(self.calibration or load_calibration())
         else:
-            from chemflow.backends.gpu import register_gpu
+            from chemflow.backends.gpu import cuda_available, gpu_sample
 
-            register_gpu(registry)
-            identifier = "statevector_cupy"
-        result = registry.implementations[identifier].adapter(
-            store, prep, self.shots, seed=self.seed)
+            if not cuda_available():
+                raise RuntimeError("CF-E080: CUDA unavailable: GPU bindings cannot run on "
+                                   "this device")
+            sample = gpu_sample
+        result = sample(store, prep, self.shots, seed=self.seed)
         result.cost["sim_shots"] = self.shots
         return result
 

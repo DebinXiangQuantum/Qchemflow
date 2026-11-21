@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import sys
 
 from chemflow.agent.llm import CONTRACTS, DEFAULT_MAX_TURNS, LLMPolicy
-from chemflow.agent.orchestrator import Orchestrator
 from chemflow.agent.task import TaskRecord
-from chemflow.agent.tools import ToolRegistry
-from chemflow.diagnostics import AdapterError, CheckError, EffectDenied
-from chemflow.runtime.budget import BudgetLedger
+from chemflow.diagnostics import AdapterError, CheckError
 from chemflow.signing import TaskVerifier
 
 DEFAULT_GLM_MODEL = "glm-5.3"
@@ -57,131 +53,46 @@ def validate_options(args) -> list[str]:
     return roles
 
 
-def engine(args) -> str:
-    """The execution engine for ``chemflow agent run``.
-
-    ``--engine auto`` (the default) follows ``CHEMFLOW_ENGINE`` when it is set; otherwise
-    the scripted policy runs QCL screens and live LLM policies keep the reviewed legacy
-    designer protocol until the QCL LLM roles are signed off. ``--engine qcl`` runs live
-    policies on the QCL roles (chemflow.agent.qcl_tools).
-    """
-    choice = getattr(args, "engine", "auto")
-    if choice == "auto":
-        choice = os.environ.get("CHEMFLOW_ENGINE") or (
-            "qcl" if getattr(args, "policy", "scripted") == "scripted" else "legacy")
-        if choice not in ("qcl", "legacy"):
-            raise ValueError("CHEMFLOW_ENGINE must be qcl or legacy")
-    return choice
-
-
 def run(args) -> None:
     try:
         if (getattr(args, "program", None) is not None or
                 getattr(args, "screen", False) or
                 getattr(args, "candidate_program", None) or
                 getattr(args, "builtin", False) or
-                engine(args) == "qcl" and getattr(args, "device", None) is not None):
+                getattr(args, "device", None) is not None):
             if args.policy != "scripted" or args.model is not None:
                 raise ValueError("QCL programs use the scripted policy")
             from chemflow.agent.qcl import run_cli
 
             run_cli(args)
             return
-        if engine(args) == "qcl":
-            from chemflow.agent.qcl_run import run as run_screens
+        from chemflow.agent.qcl_run import run as run_screens
 
-            roles = validate_options(args)
-            try:
-                record = TaskRecord.model_validate_json(args.task.read_text(encoding="utf-8"))
-                TaskVerifier(args.public_key.read_bytes()).verify(record)
-            except (OSError, ValueError, TypeError) as exc:
-                raise AdapterError("CF-E120", None, "Invalid signed task or public key",
-                                   "Supply a signed task and its public key") from exc
-            import qcl
-
-            cluster = (qcl.Cluster.load(args.cluster) if getattr(args, "cluster", None)
-                       else qcl.Cluster.local())
-            if getattr(args, "dry_run", False):
-                from chemflow.agent.qcl_run import review_screen
-
-                review_screen(args, record, cluster)
-                return
-            policies = {}
-            if args.policy != "scripted":
-                from chemflow.agent.qcl_tools import QclToolRegistry
-
-                policies = {role: LLMPolicy(role, client_factory(args.policy, role, args.model),
-                                            QclToolRegistry(), record=record,
-                                            max_turns=getattr(args, "max_turns",
-                                                              DEFAULT_MAX_TURNS),
-                                            provider=args.policy) for role in roles}
-            run_screens(args, record, cluster, policies=policies, policy=args.policy)
-            return
-        if (getattr(args, "cluster", None) is not None or
-                getattr(args, "dry_run", False) or getattr(args, "device", None) is not None):
-            raise ValueError("--cluster, --device and --dry-run require --program or --engine qcl")
+        roles = validate_options(args)
         try:
             record = TaskRecord.model_validate_json(args.task.read_text(encoding="utf-8"))
-            verifier = TaskVerifier(args.public_key.read_bytes())
-            verifier.verify(record)
+            TaskVerifier(args.public_key.read_bytes()).verify(record)
         except (OSError, ValueError, TypeError) as exc:
             raise AdapterError("CF-E120", None, "Invalid signed task or public key",
                                "Supply a signed task and its public key") from exc
-        roles = validate_options(args)
+        import qcl
+
+        cluster = (qcl.Cluster.load(args.cluster) if getattr(args, "cluster", None)
+                   else qcl.Cluster.local())
+        if getattr(args, "dry_run", False):
+            from chemflow.agent.qcl_run import review_screen
+
+            review_screen(args, record, cluster)
+            return
         policies = {}
         if args.policy != "scripted":
+            from chemflow.agent.qcl_tools import QclToolRegistry
+
             policies = {role: LLMPolicy(role, client_factory(args.policy, role, args.model),
-                                        ToolRegistry(), record=record,
+                                        QclToolRegistry(), record=record,
                                         max_turns=getattr(args, "max_turns", DEFAULT_MAX_TURNS),
                                         provider=args.policy) for role in roles}
-
-        def approve(spec):
-            if spec != record.spec:
-                raise AdapterError("CF-E120", None, "Draft differs from the signed task",
-                                   "Use the verified task unchanged")
-            return record
-
-        agent = Orchestrator(verifier, approve, args.out, max_rounds=args.rounds,
-                             policies=policies, plan_directory=args.out)
-        ledger_path = args.out / f"{record.content_hash}.ledger.json"
-        refusal = None
-        result = None
-        try:
-            result = agent.run(record.spec)
-        except AdapterError as exc:
-            if exc.diagnostics[0].code not in ("CF-E070", "CF-E080") and not isinstance(
-                    exc, EffectDenied):
-                raise
-            refusal = {"code": exc.diagnostics[0].code, "node": exc.diagnostics[0].node,
-                       "message": exc.diagnostics[0].message,
-                       "fix_hints": exc.diagnostics[0].fix_hints,
-                       "nothing_consumed": exc.nothing_consumed,
-                       "spent_at_refusal": BudgetLedger(record.spec.budget, ledger_path).spent}
-            agent.journal.append(state="REFUSED", role="orchestrator", observation=refusal,
-                                 decision="refused", reason=str(exc))
-            print(str(exc), file=sys.stderr)
-        ledger = BudgetLedger(record.spec.budget, ledger_path)
-        paths = {name: str(args.out / filename) for name, filename in (
-            ("report", "report.md"), ("journal", "journal.jsonl"),
-            ("results", "results.sqlite"), ("summary", "summary.json"))}
-        paths["ledger"] = str(ledger_path)
-        summary = {"record_hash": record.hash,
-                   "decision": result.decision.decision if result else "refused",
-                   "candidate": result.decision.candidate if result else None,
-                   "reason": result.decision.reason if result else (
-                       "Effect refusal" if refusal["code"] == "CF-E120" else
-                       "Unsupported model or implementation" if refusal["code"] == "CF-E080" else
-                       "Budget refusal"),
-                   "results": result.results if result else [], "refusal": refusal,
-                   "policy": args.policy, "roles": roles if policies else [],
-                   "spent": ledger.spent, "limits": ledger.limits, "paths": paths}
-        if record.spec.validity:
-            summary["validity"] = [item["validity"] for item in summary["results"]
-                                   if item.get("validity")]
-        (args.out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
-        if refusal is not None:
-            raise SystemExit(2)
-        print(f"{summary['decision']} {paths['report']}")
+        run_screens(args, record, cluster, policies=policies, policy=args.policy)
     except (CheckError, OSError, ValueError, TypeError, KeyError, RuntimeError, ImportError) as exc:
         message = str(exc)
         print(message if re.search(r"CF-E\d{3}", message) else f"CF-E080: {message}",

@@ -36,6 +36,7 @@ def implements(*operations: str) -> Callable[[Callable[..., None]], Callable[...
 
 from qcl._impls import (  # noqa: F401  (registration side effects)
     ci,
+    domains,
     engines,
     estimates,
     geometry,

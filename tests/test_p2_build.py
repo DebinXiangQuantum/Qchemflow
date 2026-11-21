@@ -2,6 +2,7 @@ import json
 
 from test_m3a_task import spec
 
+from chemflow.agent.qcl_tools import DESCRIPTIONS
 from chemflow.cli import main
 from chemflow.plugin_build import TARGETS, build
 from chemflow.signing import TaskSigner, TaskVerifier, generate_keypair
@@ -21,15 +22,22 @@ def test_build_targets(tmp_path):
             manifest = json.loads((output / "plugins/chemflow/plugin.json").read_text())
             assert manifest["extensions"]["com.openai"]["hooks"] == "./hooks/hooks.json"
         if target == "claude-code":
-            assert len(list((output / "agents").glob("*.md"))) == 5
+            assert [path.name for path in (output / "agents").glob("*.md")] == ["qcl.md"]
         for path in output.rglob("*.json"):
             if path.name in ("mcp.json", ".mcp.json"):
                 assert TaskVerifier(public).fingerprint in path.read_text()
-    multi = tmp_path / "pi-multi"
-    build("pi", multi, key, task=task, profiles="designer,critic")
-    extension = (multi / "extensions/chemflow.ts").read_text()
-    assert "name: 'chemflow_designer_check'" in extension
-    assert "name: 'chemflow_critic_check'" in extension
+    extension = (tmp_path / "pi" / "extensions/chemflow.ts").read_text()
+    for tool in ("task_get", "methods_list", "screen_review", "screen_run"):
+        assert f"name: '{tool}'" in extension
+        name = next(name for name in DESCRIPTIONS if name.replace(".", "_") == tool)
+        assert repr(DESCRIPTIONS[name]) in extension
+    for profiles in ("designer", "qcl,designer"):
+        try:
+            build("pi", tmp_path / "rejected", key, task=task, profiles=profiles)
+        except ValueError as error:
+            assert "profile" in str(error)
+        else:
+            raise AssertionError(f"{profiles} accepted")
 
 
 def test_activate_default_task(tmp_path, monkeypatch):
@@ -52,5 +60,5 @@ def test_activate_default_task(tmp_path, monkeypatch):
     assert (tmp_path / ".chemflow/tasks/current.json").read_text() == task.read_text()
     output = tmp_path / "package"
     build("agent-plugins", output, key_dir / "public.pem")
-    args = json.loads((output / "mcp.json").read_text())["mcpServers"]["chemflow-designer"]["args"]
+    args = json.loads((output / "mcp.json").read_text())["mcpServers"]["chemflow-qcl"]["args"]
     assert args[args.index("--task") + 1] == str(tmp_path / ".chemflow/tasks/current.json")

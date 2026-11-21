@@ -1,10 +1,10 @@
 import json
 
 import pytest
+from llm_tools import ToolRegistry
 
 from chemflow.agent.journal import Journal
 from chemflow.agent.llm import FakeLLMClient, LLMPolicy
-from chemflow.agent.tools import ToolRegistry
 
 
 def error(code="rate_limit", retryable=True, message="offline failure"):

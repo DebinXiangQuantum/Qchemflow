@@ -5,7 +5,6 @@ from scipy import constants as sc
 
 from chemflow.diagnostics import AdapterError
 
-THERMAL_KEYS = ("thermal_model", "temperature_K", "pressure_Pa", "frequency_level")
 ISOTOPE_MASSES = {1: 1.00782503223, 6: 12.0, 7: 14.00307400443, 8: 15.99491461957}
 
 

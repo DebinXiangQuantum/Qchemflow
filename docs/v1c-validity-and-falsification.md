@@ -1,5 +1,11 @@
 # V1c validity domains and V1b falsification
 
+> **Status (2026-11-21).** This guide records a milestone built on ChemFlow's earlier
+> engine (IR programs, registry operators, static checker and orchestrator), which has
+> been removed. The science and the validation below still hold; signed tasks now run as
+> QCL screens, and the operations named here map to QCL primitives or plain kernels as
+> listed in [legacy-retirement.md](legacy-retirement.md).
+
 Implemented on `v1bc`, following the signed-task A1c rule. The user supplies
 accuracy bars and validity domains; neither designer nor critic can select them.
 The concrete reviewer contracts supersede the exploratory V1b/V1c examples in

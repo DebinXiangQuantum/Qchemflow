@@ -1,5 +1,11 @@
 # V1a: relation certificates
 
+> **Status (2026-11-21).** This guide records a milestone built on ChemFlow's earlier
+> engine (IR programs, registry operators, static checker and orchestrator), which has
+> been removed. The science and the validation below still hold; signed tasks now run as
+> QCL screens, and the operations named here map to QCL primitives or plain kernels as
+> listed in [legacy-retirement.md](legacy-retirement.md).
+
 V1a verifies **what an executed result is relative to its graph-defined target**.
 It does not prove an adapter's implementation correct, certify floating-point
 roundoff, or establish that a chemical model describes an experiment accurately.

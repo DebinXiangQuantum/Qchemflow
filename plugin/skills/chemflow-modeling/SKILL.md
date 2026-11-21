@@ -1,8 +1,9 @@
 ---
 name: chemflow-modeling
-description: Inspect frozen molecular targets and select consistent active space and spin sectors.
+description: Inspect a signed molecular target and its active space before screening.
 ---
-Use `diagnose_model` for orbital diagnostics; compare the suggested active space
-with the signed task target. Use `registry_get`, `plan_new`, `plan_add_node`, and
-`check` to validate ports, sector and spin. Never edit signed task records;
-request a human to freeze a new version if the target must change.
+Use `diagnose_model` for the RHF energy, HOMO-LUMO gap, MP2 natural occupations and a
+suggested active space, and compare it with the signed target. Tasks with
+`active: auto` take the modeler's choice or that suggestion; a fixed active space is
+never changed. Never edit signed task records; ask a human to freeze a new version if
+the target must change.

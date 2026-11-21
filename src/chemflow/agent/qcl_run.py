@@ -22,6 +22,7 @@ from typing import Any
 from chemflow.agent import screen as screens
 from chemflow.agent.critic import CriticDecision, decision_items, review
 from chemflow.agent.journal import Journal
+from chemflow.agent.llm import PROMPTS
 from chemflow.agent.memory import ResultsDB
 from chemflow.diagnostics import AdapterError
 
@@ -419,7 +420,8 @@ def run(args: Any, record: Any, cluster: Any, *, device_id: str | None = None,
         active, diagnostics = screens.resolve_active(target)
         reason = ("size from MP2 natural occupations; orbitals: canonical HF frontier window"
                   if diagnostics else "Signed model")
-        if diagnostics is not None and "modeler" in policies:
+        consulted = diagnostics is not None and "modeler" in policies
+        if consulted:
             state.diagnostics = diagnostics
             policies["modeler"].decide({"diagnostics": diagnostics})
             choice = state.choice
@@ -433,7 +435,7 @@ def run(args: Any, record: Any, cluster: Any, *, device_id: str | None = None,
                                observation={"choice": choice}, decision={"active": active},
                                reason=problem)
         state.active = active
-        journal.append(state="MODEL", role="modeler",
+        journal.append(state="MODEL", role="modeler" if consulted else "orchestrator",
                        observation={"diagnostics": diagnostics} if diagnostics else {},
                        decision={"active": active}, reason=reason)
         designer = policies.get("designer")
@@ -679,34 +681,7 @@ def run(args: Any, record: Any, cluster: Any, *, device_id: str | None = None,
     return summary
 
 
-LLM_PROMPTS = {
-    "designer": (
-        "You are ChemFlow's designer on the QCL engine. The signed task, its gates and the "
-        "classical controls and exact reference are fixed; observation.controls holds their "
-        "graded results. Propose candidate methods that could meet the gates more cheaply or "
-        "with a stronger relation: sci {select_cutoff} or sqd {shots} (closed-shell "
-        "molecules only). Use methods.list for ranges, screen.review to compile a proposal "
-        "and see its inferred relations, predicted time and simulator shots, then finish "
-        "with design.submit {candidates} or design.decline {reason}. Either ends your turn. "
-        "Never assert evidence, relations or gates; ChemFlow grades every output."),
-    "modeler": (
-        "You are ChemFlow's modeler on the QCL engine. For an automatic active space, read "
-        "observation.diagnostics (or diagnose.model) and finish with model.choose "
-        "{n_elec, n_orb, reason}: positive counts, at most 10 orbitals, at most two "
-        "electrons per orbital, parity compatible with the molecule's spin. An infeasible "
-        "choice falls back to the diagnostics' suggested_active."),
-    "critic": (
-        "You are ChemFlow's critic. Challenge each candidate against the classical "
-        "controls using screen.controls and results.query; never loosen gates. The final "
-        "verdict is computed deterministically from the graded results."),
-    "planner": (
-        "You are ChemFlow's planner. The task is already signed by a human and cannot be "
-        "changed; read it with task.get and note anything the reviewer should know."),
-    "analyst": (
-        "You are ChemFlow's analyst. Read results.query and write a short report with "
-        "report.write: relations, gate verdicts, costs and limitations. Quote only recorded "
-        "energies; never claim advantage, speedup or certification."),
-}
+LLM_PROMPTS = PROMPTS
 
 
 def _designer_outcome(spec: Any, state: Any, journal: Journal, outcome: dict,
@@ -734,7 +709,7 @@ def _designer_outcome(spec: Any, state: Any, journal: Journal, outcome: dict,
 
 
 def quantity_label(spec: Any) -> str | None:
-    """What a model-defined or thermal answer means (as the legacy report labels)."""
+    """What a model-defined or thermal answer means, for the report's labels."""
     target = spec.target
     thermo = getattr(target, "thermo", None)
     if target.kind in ("reaction_energy", "reaction_barrier") and thermo is not None:

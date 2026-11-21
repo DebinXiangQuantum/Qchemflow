@@ -185,7 +185,7 @@ def map_methods(task_spec: Any, cluster: Any, entries: list[Any], *, active: Any
 
 
 def section(maps: list[dict[str, Any]]) -> list[str]:
-    """The report's validity section (the legacy format)."""
+    """The report's validity section."""
     if not maps:
         return []
     lines = ["", "## Validity", ""]

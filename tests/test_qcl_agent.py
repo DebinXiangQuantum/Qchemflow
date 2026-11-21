@@ -445,7 +445,7 @@ def test_qcl_agent_cli_builds_signed_ground_task_without_program(tmp_path, monke
     monkeypatch.setattr("sys.argv", ["chemflow", "agent", "run",
                                    "--task", str(task_path),
                                    "--public-key", str(key_path),
-                                   "--engine", "qcl", "--builtin", "--out", str(out)])
+                                   "--builtin", "--out", str(out)])
     main()
     summary = json.loads((out / "summary.json").read_text())
     review = json.loads((out / "qcl-review.json").read_text())
@@ -490,7 +490,7 @@ def test_qcl_agent_cli_screens_ground_energy_candidates(tmp_path, monkeypatch):
 
     monkeypatch.setattr("sys.argv", ["chemflow", "agent", "run",
                                    "--task", str(task), "--public-key", str(key),
-                                   "--engine", "qcl", "--screen", "--out", str(out)])
+                                   "--screen", "--out", str(out)])
     main()
     summary = json.loads((out / "summary.json").read_text())
     screen = json.loads((out / "qcl-screen.json").read_text())
@@ -544,7 +544,7 @@ def test_qcl_agent_cli_screens_authored_qcl_candidates(tmp_path, monkeypatch):
 
     monkeypatch.setattr("sys.argv", ["chemflow", "agent", "run",
                                    "--task", str(task), "--public-key", str(key),
-                                   "--engine", "qcl", "--screen",
+                                   "--screen",
                                    "--candidate-program", str(programs[0]),
                                    "--candidate-program", str(programs[1]),
                                    "--out", str(out)])
@@ -588,7 +588,7 @@ def build(task_spec, cluster):
 
     monkeypatch.setattr("sys.argv", ["chemflow", "agent", "run",
                                    "--task", str(task), "--public-key", str(key),
-                                   "--engine", "qcl", "--screen",
+                                   "--screen",
                                    "--candidate-program", str(program),
                                    "--out", str(out)])
     main()
@@ -2146,7 +2146,7 @@ def test_builtin_qcl_agent_qpu_sampling_respects_signed_task(tmp_path, monkeypat
     monkeypatch.setattr("sys.argv", ["chemflow", "agent", "run",
                                    "--task", str(task_path),
                                    "--public-key", str(key_path),
-                                   "--engine", "qcl", "--device", cluster.qpus[0].id,
+                                   "--device", cluster.qpus[0].id,
                                    "--out", str(out)])
     main()
     summary = json.loads((out / "summary.json").read_text())

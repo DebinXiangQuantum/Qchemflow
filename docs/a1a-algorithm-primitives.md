@@ -1,5 +1,11 @@
 # A1a: algorithm primitives and real-axis AIM responses
 
+> **Status (2026-11-21).** This guide records a milestone built on ChemFlow's earlier
+> engine (IR programs, registry operators, static checker and orchestrator), which has
+> been removed. The science and the validation below still hold; signed tasks now run as
+> QCL screens, and the operations named here map to QCL primitives or plain kernels as
+> listed in [legacy-retirement.md](legacy-retirement.md).
+
 Load `molecular,algorithms,dynamics` with `load_registry` or MCP `--packs`.
 Operators expose their meaning, typed ports, parameter descriptions and resource
 scaling through `registry.search` and `registry.get`. `plan.base` dispatches a

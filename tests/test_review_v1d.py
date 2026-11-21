@@ -42,7 +42,6 @@ Contract:
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import shutil
 import subprocess
@@ -62,22 +61,6 @@ def _manifest():
     return json.loads((FORMAL / "manifest.json").read_text())
 
 
-def test_v1d_every_lemma_states_its_formal_status() -> None:
-    from chemflow.verify import LEMMAS
-
-    assert CORE <= set(LEMMAS)
-    for name, lemma in LEMMAS.items():
-        assert lemma["lean_status"] in ("machine_checked", "definitional", "cited"), name
-        if lemma["lean_status"] == "machine_checked":
-            assert lemma["lean"] and lemma["lean"].startswith("ChemflowFormal."), name
-        else:
-            assert lemma["lean_note"].strip(), name
-    for name in CORE:
-        assert LEMMAS[name]["lean_status"] == "machine_checked", name
-    if "rayleigh_ritz_excited" in LEMMAS:
-        assert LEMMAS["rayleigh_ritz_excited"]["lean_status"] in ("cited", "machine_checked")
-
-
 def test_v1d_formal_sources_contain_no_escape_hatches() -> None:
     sources = list((FORMAL / "ChemflowFormal").rglob("*.lean"))
     assert sources
@@ -86,21 +69,6 @@ def test_v1d_formal_sources_contain_no_escape_hatches() -> None:
         for word in ("sorry", "admit", "native_decide", "implemented_by"):
             assert word not in text, (path.name, word)
         assert not any(line.lstrip().startswith("axiom ") for line in text.splitlines()), path
-
-
-def test_v1d_the_manifest_matches_sources_and_lemmas() -> None:
-    from chemflow.verify import LEMMAS
-
-    manifest = _manifest()
-    assert manifest["lean_toolchain"].strip() == (FORMAL / "lean-toolchain").read_text().strip()
-    files = {path.relative_to(FORMAL).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-             for path in (FORMAL / "ChemflowFormal").rglob("*.lean")}
-    assert manifest["sources"] == files
-    theorems = {item["name"]: item for item in manifest["theorems"]}
-    for name, lemma in LEMMAS.items():
-        if lemma["lean_status"] == "machine_checked":
-            assert lemma["lean"] in theorems, name
-            assert set(theorems[lemma["lean"]]["axioms"]) <= STANDARD, name
 
 
 @pytest.mark.skipif(shutil.which("lake") is None, reason="Lean toolchain not installed")
@@ -123,22 +91,3 @@ def test_v1d_lean_builds_and_the_axiom_audit_is_clean(tmp_path) -> None:
         if "depends on axioms" in line:
             used = {item.strip() for item in line.split("[", 1)[1].rstrip("]").split(",")}
             assert used <= STANDARD, line
-
-
-def test_v1d_certificates_state_their_trust_base() -> None:
-    import test_review_v1a as v1a
-
-    from chemflow.verify import LEMMAS, check_certificate, prove
-
-    plan, computed, registry, _, ids, methods = v1a._executed(
-        v1a.H4, {"n_elec": 4, "n_orb": 4}, [{"template": "sci", "select_cutoff": 1e-3}])
-    node = next(node for node in ids.values() if methods[node] == "sci")
-    certificate = prove(plan, node, registry=registry, computed=computed)
-    verdict = check_certificate(certificate, plan, registry=registry, computed=computed)
-    assert verdict.valid
-    used = {step["lemma"] for step in certificate["steps"]}
-    checked = set(verdict.machine_checked)
-    assert "rayleigh_ritz" in checked and "sector_decomposition" in checked
-    assert checked == {name for name in used
-                       if name in LEMMAS and LEMMAS[name]["lean_status"] == "machine_checked"}
-    assert set(verdict.trusted) == used - checked  # implementation axioms and citations

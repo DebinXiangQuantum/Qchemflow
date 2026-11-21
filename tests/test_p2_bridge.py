@@ -1,23 +1,23 @@
+"""The CLI tool bridge and the MCP server expose the same qcl tools for a signed task."""
+
 import asyncio
 import json
 
 import pytest
-from test_m3a_task import spec
+from test_qcl_mcp import _signed
 
 from chemflow.cli import main
 from chemflow.mcp import create_server
-from chemflow.signing import TaskSigner, TaskVerifier, generate_keypair
+from chemflow.signing import TaskVerifier
+
+pytest.importorskip("qcl")
 
 
 def test_persistent_bridge(tmp_path, monkeypatch, capsys):
-    private, public = generate_keypair(b"human")
-    key = tmp_path / "public.pem"
-    key.write_bytes(public)
-    task = tmp_path / "task.json"
-    task.write_text(TaskSigner(private, b"human").freeze(spec(), "human").model_dump_json())
-    fingerprint = TaskVerifier(public).fingerprint
+    _, task, key = _signed(tmp_path)
+    fingerprint = TaskVerifier(key.read_bytes()).fingerprint
 
-    def call(profile, name, arguments):
+    def call(name, arguments, profile="qcl"):
         monkeypatch.setattr("sys.argv", ["chemflow", "tool", "call", "--profile", profile,
                             "--task", str(task), "--public-key", str(key),
                             "--key-fingerprint", fingerprint, "--name", name,
@@ -25,20 +25,18 @@ def test_persistent_bridge(tmp_path, monkeypatch, capsys):
         main()
         return json.loads(capsys.readouterr().out)
 
-    identifier = call("designer", "plan_new", {})["data"]["plan_id"]
-    assert (tmp_path / ".chemflow-plans" / f"{identifier}.json").exists()
-    assert call("designer", "plan_render", {"plan_id": identifier})["data"]
-    server = create_server("designer", str(task), public_key=str(key),
-                           key_fingerprint=fingerprint)
-    assert server._tool_manager.get_tool("plan_render")
-    assert server._tool_manager.get_tool("plan_new")
-    rendered = asyncio.run(server.call_tool("plan_render", {"plan_id": identifier}))
-    assert not rendered.is_error
-    from_server = json.loads(rendered.content[0].text)["data"]
-    assert from_server == call("designer", "plan_render", {"plan_id": identifier})["data"]
+    methods = call("methods_list", {})["data"]
+    assert methods["reference"] == "fci"
+    server = create_server("qcl", str(task), public_key=str(key), key_fingerprint=fingerprint)
+    assert {"task_get", "methods_list", "screen_review", "screen_run"} <= {
+        tool.name for tool in asyncio.run(server.list_tools())}
+    listed = asyncio.run(server.call_tool("methods_list", {}))
+    assert not listed.is_error
+    assert json.loads(listed.content[0].text)["data"] == methods
     with pytest.raises(SystemExit) as refused:
-        call("critic", "plan_render", {"plan_id": identifier})
+        call("plan_new", {})
     assert refused.value.code == 2
     assert json.loads(capsys.readouterr().out)["error"]["type"] == "PermissionError"
-    with pytest.raises(SystemExit):
-        call("designer", "plan_render", {"plan_id": "../../escaped"})
+    with pytest.raises(SystemExit) as refused:
+        call("methods_list", {}, profile="designer")
+    assert refused.value.code == 2

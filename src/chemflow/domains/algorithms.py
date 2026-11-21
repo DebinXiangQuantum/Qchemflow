@@ -26,11 +26,9 @@ from math import comb
 
 import numpy as np
 
-from chemflow.diagnostics import Diagnostic
 from chemflow.impls.fci import matrix, sector_states
 from chemflow.impls.sqd import product_strings, recover_configurations
-from chemflow.registry import ImplementationSpec, OperatorSpec
-from chemflow.types import BackendKind, Sector, Spectrum, Subspace
+from chemflow.types import Sector, Spectrum, Subspace
 
 
 def as_sector(sector):
@@ -124,68 +122,3 @@ def rayleigh_ritz(store, hamiltonian, subspace, n_roots=1):
                     resolution_energies_ref=store.put(energies),
                     resolution_vectors_ref=store.put(vectors), subspace=subspace,
                     hamiltonian_id=hamiltonian.hamiltonian.id)
-
-
-def resources(**kwargs):
-    return {"sim_shots": 0, "qpu_shots": 0}
-
-
-def context_check(node, inputs, context, nodes):
-    if node.op == "sector":
-        context["sector_params"] = node.params
-    elif node.op in ("full_subspace", "subspace_from_samples", "extend_subspace"):
-        context.update(sector_id=inputs.get("sector", {}).get("sector_id"),
-                       sector_params=inputs.get("sector", {}).get("sector_params"))
-    elif node.op == "rayleigh_ritz":
-        context.update(inputs.get("hamiltonian", {}))
-        context.update(type="spectrum", sector_id=inputs.get("subspace", {}).get("sector_id"))
-        context["sector_params"] = inputs.get("subspace", {}).get("sector_params")
-    try:
-        if node.op == "extend_subspace" and all(port in inputs for port in ("subspace", "sector")):
-            source = inputs["subspace"].get("sector_params")
-            target = inputs["sector"].get("sector_params")
-            if source is not None and target is not None:
-                transition_sector(as_sector(source), as_sector(target), node.params["operator"],
-                                  node.params["orbital"], node.params["spin"])
-            if node.params.get("closure", "none") not in ("none", "singles", "doubles"):
-                raise ValueError("Unknown subspace closure")
-        if node.op == "rayleigh_ritz":
-            roots = node.params.get("n_roots", 1)
-            if type(roots) is not int or roots < 1:
-                raise ValueError("n_roots must be a positive integer")
-    except (ValueError, KeyError, TypeError) as exc:
-        return [Diagnostic(code="CF-E020", node=node.id, message=str(exc),
-                           fix_hints=["Use valid sectors, ladder parameters and root counts"])]
-    return []
-
-
-def register(registry):
-    for name, inputs, output, adapter, params, meaning in (
-        ("full_subspace", {"sector": "sector"}, "subspace", full_subspace, set(),
-         "All orthonormal determinants in a fixed particle sector; O(D M) enumeration."),
-        ("subspace_from_samples", {"samples": "samples", "sector": "sector"}, "subspace",
-         subspace_from_samples, {"recovery", "seed"},
-         "SQD configuration recovery and product-of-spin-strings closure; O(shots M + D)."),
-        ("extend_subspace", {"subspace": "subspace", "sector": "sector"}, "subspace",
-         extend_subspace, {"operator", "orbital", "spin", "closure"},
-         "Ladder image in N±1; singles O(D M²) or doubles O(D M⁴) closure."),
-        ("rayleigh_ritz", {"hamiltonian": "hamiltonian", "subspace": "subspace"}, "spectrum",
-         rayleigh_ritz, {"n_roots"},
-         ("Eigenpairs of P*HP, HUM variational bounds; O(D³) solve and O(D²) storage. "
-          "n_roots selects leading outputs; complete projected resolution retained for responses.")),
-    ):
-        registry.register(OperatorSpec(id=f"chemflow.{name}", version=1, inputs=inputs,
-                                       output=output, semantics=meaning,
-                                       parameters={key: {
-                                           "recovery": "configuration (default): SQD bit recovery",
-                                           "seed": "integer RNG seed, default 7",
-                                           "operator": "create | annihilate",
-                                           "orbital": "zero-based spatial orbital",
-                                           "spin": "alpha | beta",
-                                           "closure": "none (default) | singles | doubles (two layers)",
-                                           "n_roots": "positive integer, default 1; leading roots",
-                                       }[key] for key in params}))
-        registry.register(ImplementationSpec(id=name, version="1", target=name, adapter=adapter,
-                          backend_kind=BackendKind.cpu_numeric, params=frozenset(params),
-                          resource_model=resources))
-    registry.context_checks.append(context_check)

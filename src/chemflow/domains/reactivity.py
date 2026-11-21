@@ -4,13 +4,7 @@ import math
 from collections import Counter
 from typing import Literal, TypedDict
 
-import numpy as np
 from scipy.special import expit
-
-from chemflow import build
-from chemflow.domains._adapters import estimate
-from chemflow.ids import content_hash
-from chemflow.registry import ImplementationSpec, OperatorSpec, RefinementRule
 
 FCI_MAX_DETERMINANTS = 250_000
 METHODS = ("hf", "mp2", "ccsd_t", "fci")
@@ -43,11 +37,6 @@ class SiteReactivity(TypedDict):
     sites: list[SiteRecord]
     top_site: int | None
     evidence: Literal["empirical"]
-
-
-class BoltzmannWeights(TypedDict):
-    weights: list[float]
-    temperature_K: float
 
 
 class ConformerRecord(TypedDict):
@@ -193,27 +182,6 @@ def _solve(molecule, model, method):
     return float(energy), mean_field
 
 
-def app_component_energy(store, molecule, electronic_model, method):
-    from pyscf import ao2mo
-
-    from chemflow.types import ConstantLedger, Hamiltonian, Sector
-    from chemflow.units import Q
-
-    energy, mean_field = _solve(molecule, electronic_model, method)
-    orbitals = mean_field.mo_coeff
-    mol = mean_field.mol
-    ham = Hamiltonian(h1_ref=store.put(orbitals.T @ mean_field.get_hcore() @ orbitals),
-        h2_ref=store.put(ao2mo.restore(1, ao2mo.kernel(mol, orbitals), orbitals.shape[1])),
-        n_orb=orbitals.shape[1], space=store.put(orbitals),
-        ledger=ConstantLedger().add("nuclear_repulsion", Q(float(mol.energy_nuc()), "hartree")))
-    sector = Sector(n_alpha=mol.nelec[0], n_beta=mol.nelec[1], n_orb=orbitals.shape[1])
-    return estimate(energy, "total_electronic_energy", "approximate",
-        {"hamiltonian_id": content_hash((molecule, electronic_model))}, "app_component_energy",
-        diagnostics={"hamiltonian_witness": ham.model_dump(mode="json"),
-                     "sector_witness": sector.model_dump(mode="json"),
-                     "fci_max_determinants": FCI_MAX_DETERMINANTS})
-
-
 def _level(level, allowed):
     if (not isinstance(level, dict) or set(level) - {"method", "functional", "dispersion"}
             or level.get("method") not in allowed or level.get("functional") is not None
@@ -246,17 +214,6 @@ def site_reactivity(store, molecule, model, level) -> SiteReactivity:
                       "score": float(fraction * expit((90 - kcal) / 3))})
     return {"sites": sites, "top_site": max(sites, key=lambda site: site["score"])["atom"]
             if sites else None, "evidence": "empirical"}
-
-
-def boltzmann_weights(store, energies, temperature_K=298.15) -> BoltzmannWeights:
-    values = np.asarray(energies, dtype=float)
-    if (values.ndim != 1 or not values.size or not np.isfinite(values).all() or
-            not math.isfinite(temperature_K) or temperature_K <= 0):
-        raise ValueError("Finite nonempty energies and positive temperature are required")
-    with np.errstate(over="ignore", under="ignore"):
-        raw = np.exp(-(values - values.min()) / temperature_K *
-                     (4.3597447222071e-18 / 1.380649e-23))
-    return {"weights": (raw / raw.sum()).tolist(), "temperature_K": temperature_K}
 
 
 def conformer_search(store, molecule_smiles, level, count=20, rmsd=0.3) -> ConformerSearch:
@@ -335,185 +292,3 @@ def components(target):
     molecule = target["molecule"]
     return [molecule, *[fragment for bond in representatives(molecule, target["bonds"])
                        for fragment in homolysis(None, molecule, bond["atoms"])["fragments"]]]
-
-
-def collection_values(target, energies):
-    if target["kind"] == "ranking":
-        return energies
-    return [energies[index] + energies[index + 1] - energies[0]
-            for index in range(1, len(energies), 2)]
-
-
-def energy_collection(store, target, bar_hartree, **inputs):
-    energies = [inputs[f"component{index}"].value.to("hartree").value
-                for index in range(len(components(target)))]
-    values = collection_values(target, energies)
-    details = {"values_hartree": values}
-    if target["kind"] == "ranking":
-        order = sorted(range(len(values)), key=lambda index: values[index])
-        bounds = [0.0 if inputs[f"component{index}"].relation == "equivalent" and
-                  inputs[f"component{index}"].diagnostics.get("relation_status") == "proved"
-                  else bar_hartree for index in range(len(values))]
-        details.update(ranking=[target["items"][index]["name"] for index in order],
-            error_bounds_hartree=bounds, certified_pairs=[
-                [target["items"][left]["name"], target["items"][right]["name"]]
-                for offset, left in enumerate(order) for right in order[offset + 1:]
-                if bounds[left] is not None and bounds[right] is not None and
-                values[right] - values[left] > bounds[left] + bounds[right]],
-            certification_basis="conditional on task error bars; exact inputs use zero")
-    return estimate(values[0], "energy_difference", "approximate",
-                    {"hamiltonian_id": content_hash(target)}, target["kind"], details)
-
-
-def base_plan(record, active=None):
-    if active is not None:
-        raise ValueError("APP C uses full molecular orbital spaces")
-    target = record.spec.target.model_dump(exclude={"operator"})
-    species = components(target)
-    bar = task_bar(record)
-    with build.program("app-c-controls") as builder:
-        controls = []
-        for method in METHODS:
-            inputs = {f"component{index}": builder.node("app_component_energy", molecule=molecule,
-                      electronic_model=target["electronic_model"], method=method)
-                      for index, molecule in enumerate(species)}
-            result = builder.node(target["kind"], target=target, bar_hartree=bar, **inputs)
-            if method == "fci":
-                builder.ir.references = [result.id]
-            else:
-                controls.append(result.id)
-        builder.ir.targets = [*controls, *builder.ir.references]
-        return builder.to_ir(), controls
-
-
-def task_bar(record):
-    from chemflow.units import Q
-
-    bars = [Q(gate.threshold, gate.unit).to("hartree").value for gate in record.spec.gates
-            if gate.kind == "abs_error_vs_exact"]
-    return min(bars) if bars else None
-
-
-def identity(plan, record, contexts):
-    from .scans import plan_identity
-
-    expected, _ = base_plan(record)
-    return plan_identity(plan, expected)
-
-
-def resources(**kwargs):
-    return {"wall_s": None, "cpu_core_s": None, "gpu_s": 0, "qpu_s": 0,
-            "qpu_shots": 0, "sim_shots": 0}
-
-
-def parameter_errors(node):
-    parameters = node.params
-    failures = []
-    if node.op == "enumerate_bonds" and parameters.get("elements") is not None:
-        pair = parameters["elements"]
-        if not isinstance(pair, str) or len(pair.split("-")) != 2:
-            failures.append("elements must be an element pair")
-    if node.op == "homolysis" and "atoms" in parameters:
-        pair = parameters["atoms"]
-        if (not isinstance(pair, list) or len(pair) != 2 or
-                any(type(index) is not int or index < 0 for index in pair) or pair[0] == pair[1]):
-            failures.append("atoms must contain two distinct nonnegative integer indices")
-    if node.op == "boltzmann_weights" and "energies" in parameters:
-        energies = parameters["energies"]
-        if (not isinstance(energies, list) or not energies or any(
-                type(value) not in (int, float) or not math.isfinite(value) for value in energies)):
-            failures.append("energies must be a nonempty list of finite numbers")
-    if node.op in ("site_reactivity", "conformer_search") and "level" in parameters:
-        try:
-            _level(parameters["level"], METHODS if node.op == "site_reactivity" else ("gfn2", "mmff"))
-        except ValueError as error:
-            failures.append(str(error))
-    if node.op == "app_component_energy":
-        if "method" in parameters and parameters["method"] not in METHODS:
-            failures.append("Unsupported electronic method")
-        if "electronic_model" in parameters:
-            try:
-                validate_model(parameters["electronic_model"])
-            except (ValueError, TypeError, AttributeError):
-                failures.append("Unsupported electronic model")
-    if node.op == "conformer_search":
-        count = parameters.get("count", 20)
-        if type(count) is not int or not 1 <= count <= 1000:
-            failures.append("count must be an integer in 1..1000")
-    for name in ({"rmsd"} if node.op == "conformer_search" else
-                 {"temperature_K"} if node.op == "boltzmann_weights" else set()):
-        value = parameters.get(name, 1)
-        if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
-            failures.append(f"{name} must be finite and positive")
-    if node.op in ("ranking", "bond_dissociation"):
-        bar = parameters.get("bar_hartree")
-        if bar is not None and (type(bar) not in (int, float) or not math.isfinite(bar) or bar < 0):
-            failures.append("bar_hartree must be finite and nonnegative")
-        if "target" in parameters:
-            from chemflow.agent.task import BondDissociationTarget, RankingTarget
-
-            try:
-                (RankingTarget if node.op == "ranking" else BondDissociationTarget).model_validate(
-                    parameters["target"])
-            except ValueError as error:
-                failures.append(str(error))
-    return failures
-
-
-def context_check(node, inputs, context, nodes):
-    if node.op == "app_component_energy":
-        context.update(kind="total_electronic_energy", unit="hartree",
-                       hamiltonian_id=content_hash((node.params["molecule"],
-                                                   node.params["electronic_model"])))
-    if node.op in ("ranking", "bond_dissociation"):
-        context.update(kind="energy_difference", unit="hartree",
-                       hamiltonian_id=content_hash(node.params["target"]))
-        species = components(node.params["target"])
-        if set(inputs) != {f"component{index}" for index in range(len(species))}:
-            raise ValueError("Energy collection requires every component exactly once")
-        for index, molecule in enumerate(species):
-            expected = content_hash((molecule, node.params["target"]["electronic_model"]))
-            if inputs[f"component{index}"].get("hamiltonian_id") != expected:
-                from chemflow.ir.schema import Node
-
-                from .scans import signature
-
-                reference = Node(id="expected_component", op="app_component_energy", params={
-                    "molecule": molecule,
-                    "electronic_model": node.params["target"]["electronic_model"]})
-                if signature(nodes, node.inputs[f"component{index}"], True) != signature(
-                        {reference.id: reference}, reference.id, True):
-                    raise ValueError("Collection component identity differs from its target")
-    return []
-
-
-def register(registry):
-    specs = [
-        ("enumerate_bonds", enumerate_bonds, {"molecule": "molecule"}, "bond_enumeration",
-         {"elements": "str | null"}, "RDKit perceived bonds and canonical symmetry classes"),
-        ("homolysis", homolysis, {"molecule": "molecule"}, "radical_fragments",
-         {"atoms": "list[int]"}, "Two neutral rigid fragments by homolytic bond cleavage"),
-        ("site_reactivity", site_reactivity, {"molecule": "molecule", "model": "model"},
-         "site_reactivity", {"level": "dict"}, "Empirical C-H BDE and FreeSASA reactivity heuristic"),
-        ("boltzmann_weights", boltzmann_weights, {}, "boltzmann_weights",
-         {"energies": "list[float]", "temperature_K": "float"},
-         "Model-defined canonical Boltzmann populations for supplied hartree energies"),
-        ("conformer_search", conformer_search, {}, "conformer_search",
-         {"molecule_smiles": "str", "level": "dict", "count": "int", "rmsd": "float"},
-         "Seeded ETKDGv3, GFN2 or MMFF optimization and heavy-atom RMSD deduplication"),
-        ("app_component_energy", app_component_energy, {}, "estimate",
-         {"molecule": "dict", "electronic_model": "dict", "method": "str"},
-         "Full-space radical-capable HF, MP2, CCSD(T), capped FCI component energies"),
-        *[(kind, energy_collection, {}, "estimate", {"target": "dict", "bar_hartree": "float | null"},
-           "Rigid symmetry-class bond dissociation energies (BDE)" if kind == "bond_dissociation" else
-           "Same-formula energy ranking with conditional error-bar certified pairs")
-          for kind in ("bond_dissociation", "ranking")]]
-    for name, adapter, inputs, output, parameters, description in specs:
-        registry.register(OperatorSpec(id=f"chemflow.{name}", version=1, inputs=inputs,
-            output=output, parameters=parameters, semantics=description))
-        registry.register(ImplementationSpec(id=name, version="1", target=name, adapter=adapter,
-            backend_kind="cpu_numeric", execution_role="classical", resource_model=resources,
-            params=frozenset(parameters), implements=f"app_c_{name}"))
-        registry.register(RefinementRule(target=name, template_id=f"app_c_{name}",
-                                         relation="approximate"))
-    registry.context_checks.append(context_check)

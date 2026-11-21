@@ -6,11 +6,7 @@ import sys
 import pytest
 
 from chemflow import cli
-from chemflow.agent.task import TaskStore
-from chemflow.agent.tools import make_tools
 from chemflow.eval import runner
-from chemflow.ops.molecular import molecular_registry
-from chemflow.runtime import Executor
 
 
 @pytest.fixture
@@ -117,14 +113,3 @@ def test_cli_completes_after_first_task_crashes(tmp_path, monkeypatch):
     assert results["rows"][1]["correct"]
     report = (tmp_path / "out" / "report.md").read_text()
     assert "### h2-ground" in report and "IndexError: first task crashed" in report
-
-
-def test_candidates_without_reference_is_structured(task):
-    store = TaskStore("test-secret")
-    record = store.freeze(task.spec, "human")
-    registry = molecular_registry()
-    tools = make_tools(registry, Executor(registry), record, store)
-    plan = tools.call("designer", "plan.new", {})["data"]["plan_id"]
-    with pytest.raises(ValueError, match="plan has no reference node"):
-        tools.call("designer", "plan.candidates", {
-            "plan_id": plan, "candidates": [{"template": "sci", "select_cutoff": 0.01}]})

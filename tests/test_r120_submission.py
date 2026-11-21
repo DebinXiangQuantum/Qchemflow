@@ -4,59 +4,10 @@ import subprocess
 from argparse import Namespace
 
 import pytest
-from test_m3b_llm import policy
 
 from chemflow.agent import cli
 from chemflow.agent.llm import DEFAULT_MAX_TURNS, FakeLLMClient, LLMPolicy
-from chemflow.agent.orchestrator import Orchestrator
 from chemflow.eval import _worker, runner
-from chemflow.ir.schema import AcceptanceGate, Program
-
-
-@pytest.mark.parametrize("mutation", [
-    "scratch", "prefix", "references", "targets", "no_candidate", "gates", "unknown", "unbound",
-])
-def test_submit_reports_base_contract_error_and_remains_recoverable(tmp_path, mutation):
-    agent, client, _ = policy(tmp_path, "designer", [])
-    base, _ = Orchestrator._base_plan(agent.record, agent.record.spec.target.active)
-    base_id = agent.tools.plans.put(base)
-    agent.tools.design_base_plan_id = base_id
-    trial, _ = Orchestrator._candidate_plan(base, [{"template": "sci"}])
-    good_id = agent.tools.plans.put(trial)
-    if mutation == "scratch":
-        trial = Program(name="scratch")
-    elif mutation == "prefix":
-        trial.nodes[0].params["changed"] = True
-    elif mutation == "references":
-        trial.references = []
-    elif mutation == "targets":
-        trial.targets = trial.targets[len(base.targets):]
-    elif mutation == "no_candidate":
-        trial = base
-    bad_id = agent.tools.plans.put(trial)
-    if mutation == "gates":
-        agent.tools.plans._plans[bad_id].gates = [AcceptanceGate(
-            node="candidate0", kind="abs_error_vs_exact", threshold=0.1, unit="hartree")]
-    if mutation == "unknown":
-        bad_id = "unknown"
-    if mutation == "unbound":
-        agent.tools.design_base_plan_id = None
-    with pytest.raises(ValueError, match="observation.base_plan_id"):
-        agent.tools.call("designer", "design.submit", {"plan_id": bad_id})
-    agent.tools.design_base_plan_id = base_id
-    if mutation != "unbound":
-        client.responses = iter([
-            {"content": "", "tool_calls": [{"name": "design.submit",
-                                            "arguments": {"plan_id": bad_id}}]},
-            {"content": "", "tool_calls": [{"name": "design.submit",
-                                            "arguments": {"plan_id": good_id}}]},
-        ])
-        result = agent.decide({"base_plan_id": base_id})
-        assert len(client.messages) == 2
-        assert "error" in result["outputs"][0]
-        assert result["end_reason"] == "design.submit"
-        assert result["outputs"][-1]["result"]["data"]["plan_id"] == good_id
-    assert agent.tools.plans.get(base_id) == base
 
 
 @pytest.mark.parametrize("max_turns", [0, -1, True, 1.5, None])

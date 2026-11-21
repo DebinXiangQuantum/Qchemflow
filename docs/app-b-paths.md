@@ -1,5 +1,11 @@
 # APP B: geometry, scans and reaction paths
 
+> **Status (2026-11-21).** This guide records a milestone built on ChemFlow's earlier
+> engine (IR programs, registry operators, static checker and orchestrator), which has
+> been removed. The science and the validation below still hold; signed tasks now run as
+> QCL screens, and the operations named here map to QCL primitives or plain kernels as
+> listed in [legacy-retirement.md](legacy-retirement.md).
+
 The `paths` domain pack provides classical geometry transformations, constrained
 optimization, PES and dimer scans, climbing-image NEB, bidirectional IRC and Eyring
 rates. `load_registry(pack_names())` loads it; `load_registry(["paths"])` also loads

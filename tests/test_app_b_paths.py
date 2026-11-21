@@ -3,17 +3,12 @@ import math
 import numpy as np
 import pytest
 
-from chemflow import build
-from chemflow.check import check
-from chemflow.domains import load_registry, pack_names
 from chemflow.domains.paths import (
     bond_graph,
     coordinates,
     geometry_transform,
     rate_constant,
 )
-from chemflow.runtime import Executor
-from chemflow.verify.semantics import denotation
 
 WATER = {"atoms": "O 0 0 0; H 0 .757 .587; H 0 -.757 .587"}
 
@@ -58,45 +53,3 @@ def test_wigner_supplied_frequency_and_validation():
         rate_constant(None, .03, 298.15, "wigner")
     with pytest.raises(ValueError):
         rate_constant(None, .03, 0)
-
-
-def test_registration_resources_denotations_and_nullable_level():
-    registry = load_registry(pack_names())
-    for name in ("geometry_transform", "constrained_optimize", "pes_scan", "interaction_scan",
-                 "neb_path", "irc", "rate_constant"):
-        assert registry.search(name)
-        implementation = registry.implementations[name]
-        assert implementation.execution_role == "classical"
-        resources = implementation.resource_model()
-        assert all(resources[key] == 0 for key in ("gpu_s", "sim_shots", "qpu_s", "qpu_shots"))
-    with build.program("constraints") as builder:
-        molecule = builder.molecule(**WATER)
-        model = builder.electronic_model(basis="sto-3g")
-        builder.node("constrained_optimize", molecule=molecule, model=model,
-                     level={"method": "hf", "functional": None, "dispersion": None},
-                     constraints=[{"type": "bond", "atoms": [0, 1], "value": 1.1}])
-    program = builder.to_ir()
-    assert not check(program, registry)
-    assert denotation(program.nodes[-1], registry)["kind"] == "opaque"
-    program.nodes[-1].params["level"]["method"] = None
-    assert check(program, registry)
-
-
-@pytest.mark.parametrize("method", ["hf", "dft", "gfn2"])
-def test_optimization_result_is_a_downstream_molecule(method):
-    registry = load_registry(["paths"])
-    with build.program("downstream") as builder:
-        optimized = builder.node("constrained_optimize", molecule=builder.molecule(**WATER),
-            model=builder.electronic_model(basis="sto-3g"),
-            level={"method": method, "functional": "lda,vwn" if method == "dft" else None,
-                   "dispersion": None},
-            constraints=[{"type": "bond", "atoms": [0, 1], "value": 1.1}])
-        moved = builder.node("geometry_transform", molecule=optimized,
-                             operation="translate_fragment", atoms=[], fragment=[2], value=2.0)
-    results = Executor(registry).run(builder.to_ir())
-    result = results[optimized.id]
-    assert isinstance(result, dict) and result["atoms"] == result["molecule"]["atoms"]
-    positions = coordinates(result)[1]
-    assert np.linalg.norm(positions[1] - positions[0]) == pytest.approx(1.1, abs=1e-3)
-    assert math.isfinite(result["energy_hartree"])
-    assert results[moved.id]["unit"] == "angstrom"

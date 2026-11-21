@@ -122,31 +122,3 @@ def test_h4_the_apps_suite_is_answered_by_the_scripted_policy(tmp_path) -> None:
             assert row["decision"] in ("error", "failed", "refused"), row
             continue
         assert row["correct"], (row["id"], row.get("error"), row["decision"])
-
-
-def test_h5_the_planner_can_draft_from_the_catalogue() -> None:
-    import test_review_m4a as m4a
-
-    from chemflow.agent.llm import LLMPolicy
-
-    tools = m4a._tools()
-    planner = {schema["name"] for schema in tools.schemas("planner")}
-    assert "app.draft" in planner
-    drafted = tools.call("planner", "app.draft", {"app_id": "frontier_orbitals",
-                                                  "example": True})["data"]
-    assert drafted and all("signature" not in json.dumps(item) for item in drafted)
-
-    class Capture:
-        model = "capture"
-
-        def __init__(self):
-            self.messages = []
-
-        def complete(self, messages, schemas):
-            self.messages.append(messages)
-            return {"tool_calls": [], "content": "done", "stop_reason": "stop", "usage": {}}
-
-    client = Capture()
-    LLMPolicy("planner", client, tools).decide({"task": {}})
-    system = client.messages[0][0]["content"]
-    assert all(app_id in system for app_id in APPS)
