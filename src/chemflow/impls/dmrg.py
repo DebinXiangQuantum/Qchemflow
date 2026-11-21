@@ -1,4 +1,4 @@
-"""block2 variational MPS energies for site-basis lattice integrals."""
+"""block2 variational MPS energies for active-space or site-basis integrals."""
 
 from tempfile import TemporaryDirectory
 
@@ -10,10 +10,8 @@ def dmrg_block2(store, hamiltonian, sector, s=None, total_spin=None,
     from block2 import Random
     from pyblock2.driver.core import DMRGDriver, SymmetryTypes
 
-    from chemflow.domains.materials import LatticeData
-
-    if not isinstance(hamiltonian, LatticeData):
-        raise TypeError("dmrg_block2 requires a lattice Hamiltonian")
+    if getattr(hamiltonian, "hamiltonian", None) is None:
+        raise TypeError("dmrg_block2 requires an active-space or lattice Hamiltonian")
     if any(type(value) is not int or value < 1 for value in (bond_dimension, sweeps)):
         raise ValueError("bond_dimension and sweeps must be positive integers")
     if type(seed) is not int:

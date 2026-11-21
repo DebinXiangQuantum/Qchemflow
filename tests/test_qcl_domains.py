@@ -29,9 +29,10 @@ def _run(workflow, *args, **options):
 
 def test_the_primitives_declare_their_relations():
     table = qcl.primitives()
-    for op in ("qmmm.energy", "embedding.ewf", "drug.descriptors", "drug.filter",
-               "synthesis.routes"):
+    for op in ("embedding.ewf", "drug.descriptors", "drug.filter", "synthesis.routes"):
         assert table[op]["kind"] == "compute" and table[op]["devices"] == ["cpu"], op
+    # GPU FCI and GPU-sampled SQD solve the QM/MM CASCI region on a GPU.
+    assert table["qmmm.energy"]["devices"] == ["cpu", "gpu"]
     assert table["qmmm.energy"]["output"] == "estimate"
     assert table["drug.filter"]["output"] == "record"
 

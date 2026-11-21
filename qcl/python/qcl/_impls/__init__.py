@@ -46,5 +46,6 @@ from qcl._impls import (  # noqa: F401  (registration side effects)
     post,
     quantum,
     scf,
+    solvers,
     transfer,
 )

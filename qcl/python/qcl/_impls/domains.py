@@ -3,6 +3,16 @@
 from qcl._impls import implements
 
 
+def _on_device(device, run):
+    """Run on the placed GPU (QCL places by ordinal; CuPy uses the current device)."""
+    if device["kind"] != "gpu":
+        return run()
+    import cupy
+
+    with cupy.cuda.Device(int(device["id"].removeprefix("gpu"))):
+        return run()
+
+
 def _cpu(node, what):
     device = node["device"]
     if device["kind"] != "cpu":
@@ -16,16 +26,27 @@ def _op_qmmm_energy(ctx, node, identifier, operation, inputs):
 
     from chemflow.domains.qmmm import mm_system, qmmm_energy
 
-    device = _cpu(node, "QM/MM")
     params = node["params"]
+    solver = params.get("solver", "fci")
+    device = node["device"]
+    gpu = solver == "gpu_fci" or (solver == "sqd" and params.get("sampler") == "gpu")
+    if device["kind"] != ("gpu" if gpu else "cpu"):
+        raise ValueError(f"QM/MM with solver {solver} cannot run on a {device['kind']}")
     system = mm_system(ctx.store, params["pdb"], params["forcefields"], params["nonbonded"])
     cas = tuple(params["cas"]) if params["cas"] is not None else None
-    computed = qmmm_energy(ctx.store, system, params["positions_nm"], params["qm_atoms"],
-                           params["basis"], method=params["method"], cas=cas,
-                           charge=params["charge"], spin=params["spin"])
+    options = None
+    if solver == "sqd":
+        options = {key: params[key] for key in ("sampler", "shots", "seed", "n_batches",
+                                                "max_iter")}
+    computed = _on_device(device, lambda: qmmm_energy(
+        ctx.store, system, params["positions_nm"], params["qm_atoms"], params["basis"],
+        method=params["method"], cas=cas, solver=solver, solver_options=options,
+        charge=params["charge"], spin=params["spin"]))
     estimate = computed.value
     diagnostics = estimate.diagnostics
-    method = "RHF" if params["method"] == "rhf" else f"CASCI{list(cas)}/FCI"
+    method = ("RHF" if params["method"] == "rhf" else
+              f"CASCI{list(cas)}/" + {"fci": "FCI", "gpu_fci": "GPU FCI",
+                                      "sqd": f"SQD({params.get('sampler')})"}[solver])
     ctx.values[identifier] = {
         "value": float(estimate.value.to("hartree").value), "unit": "hartree", "variance": 0.0,
         "provenance": {
@@ -40,6 +61,10 @@ def _op_qmmm_energy(ctx, node, identifier, operation, inputs):
             "device": device["id"], "versions": {"pyscf": pyscf.__version__},
             "components": {key: diagnostics[key] for key in ("qm", "mm", "total")
                            if key in diagnostics},
+            "qm_solver": {key: value for key, value in
+                          diagnostics.get("provenance", {}).get("qm_solver", {}).items()
+                          if key in ("relation", "device", "resources", "converged",
+                                     "subspace_dimension", "s2")},
             "validity_flags": ["Electrostatic embedding; no link atoms or QM forces",
                                "Exact only within the stated QM/MM model"],
         },

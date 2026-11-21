@@ -20,7 +20,8 @@ DEVICES = {
 # the same GPU) and QPU programs (kernel width, simulator and site checks).
 CONDITIONAL = {("rdm1", "gpu"), ("rdm2", "gpu")} | {
     (op, "gpu") for op in ("scf.rhf", "scf.hf", "scf.rohf", "scf.uhf", "dft.rks", "dft.uks")
-} | {(op, "qpu") for op in ("sample", "estimate.quantum", "vqe.sampled")}
+} | {(op, "qpu") for op in ("sample", "estimate.quantum", "vqe.sampled")} | {
+    ("qmmm.energy", "cpu"), ("qmmm.energy", "gpu")}
 
 
 def e203(op: str, kind: str) -> list[dict]:

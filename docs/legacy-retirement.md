@@ -45,17 +45,21 @@ gone for CPU plans: they fork from a pre-warmed worker server (`qcl._zygote`).
 | `search_routes` | `qcl.synthesis.routes` |
 | `lattice_model`, `periodic_scf`, pairing correlations, `allen_dynes_tc` | `qcl.models.hubbard`, `qcl.periodic.scf`, lattice screens, `qcl.superconductivity.allen_dynes` |
 | `impurity_model`, `spectral_exact` | `qcl.dynamics.spectral_exact` |
+| `dmrg`, `vqe_statevector`, `adapt_statevector` | `qcl.dmrg.solve`, `qcl.vqe.statevector`, `qcl.vqe.adapt` |
+| `neb_path`, `potential_energy` (MACE), `eom_charge_energy` | `qcl.neb`, `qcl.engines.mace.*`, `qcl.eom.ip/ea` |
+| `dock`, `ligands_from_names`, `fragment_interaction` | `qcl.drug.dock`, `qcl.drug.ligands`, `qcl.binding.fragments` |
+| `subspace_from_samples`, `extend_subspace`, `rayleigh_ritz`, `lehmann_from_spectra` | `qcl.dynamics.spectral_subspace` |
+| QM/MM `qmmm_sqd_*`, `qmmm_gpu_fci` bindings | `qcl.qmmm.energy(..., solver="sqd" \| "gpu_fci")` |
 
-These kernels remain plain functions without a QCL primitive yet: DMRG
-(`chemflow.impls.dmrg`), statevector and ADAPT-VQE (`chemflow.impls.vqe`, `impls.adapt`),
-NEB paths (`chemflow.domains.paths.neb_path`), MACE potentials
-(`chemflow.domains.baselines.potential_energy`), EOM-CCSD IP/EA
-(`chemflow.domains.properties.eom_charge_energy`), docking and name resolution
-(`chemflow.domains.drug.dock`, `ligands_from_names`), QM fragment binding
-(`chemflow.domains.binding.fragment_interaction`), the sampled-subspace Lehmann
-primitives of A1a (`chemflow.domains.algorithms`, `dynamics.lehmann_from_spectra`) and the
-QM/MM quantum solvers (`chemflow.plugins.pyscf.SQDSolver`, `GPUFCISolver`). Their tests
-call them directly.
+The kernels that first stayed plain functions are QCL primitives too: DMRG
+(`qcl.dmrg.solve`), statevector and ADAPT-VQE (`qcl.vqe.statevector`, `qcl.vqe.adapt`), NEB
+(`qcl.neb`), MACE (`qcl.engines.mace.energy/optimize`), EOM-CCSD IP/EA (`qcl.eom.ip/ea`),
+docking and name resolution (`qcl.drug.dock`, `qcl.drug.ligands`), QM fragment binding
+(`qcl.binding.fragments`), the sampled-subspace Lehmann pipeline of A1a
+(`qcl.dynamics.spectral_subspace`) and the QM/MM CASCI solvers (`qcl.qmmm.energy(...,
+solver="gpu_fci" | "sqd")`). `tests/test_qcl_solvers.py` checks each against an
+independent reference. Cloud QPU sampling is reached only through `qcl.sample` and the
+operator's QPU policy, so the QM/MM SQD solver offers local samplers only.
 
 ## Retired tests
 

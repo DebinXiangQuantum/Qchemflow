@@ -1369,6 +1369,47 @@ class _Dynamics:
                                                    _source()), "spectral_estimate")
 
 
+    @staticmethod
+    def spectral_subspace(model: dict[str, Any], sector: dict[str, Any], *, orbital: int,
+                          spin: str, omega: dict[str, Any], eta: float,
+                          subspace: str = "sampled", shots: int = 20000, seed: int = 7,
+                          closure: str = "singles") -> _Value:
+        """Lehmann spectral function from Rayleigh–Ritz spectra in determinant subspaces.
+
+        ``subspace="sampled"`` samples the LUCJ (CCSD-seeded) ground state on a statevector,
+        recovers configurations, and extends them into the N±1 sectors with the ladder
+        operator and ``closure`` excitations: approximate. ``subspace="full"`` uses every
+        determinant and is equivalent to the exact Lehmann sum.
+        """
+        source = _source()
+        graph = _active("dynamics")
+        try:
+            from chemflow.domains.algorithms import as_sector
+            from chemflow.domains.dynamics import grid, impurity_arrays
+
+            h1, _ = impurity_arrays(**model)
+            particles = as_sector(sector)
+            grid(omega, eta)
+            if (particles.n_orb != len(h1) or type(orbital) is not int or
+                    not 0 <= orbital < particles.n_orb or spin not in ("alpha", "beta")):
+                raise ValueError("Spectral sector, orbital or spin differs from model")
+        except (TypeError, KeyError, ValueError) as error:
+            raise _compile_error(source, f"Invalid spectral input: {error}",
+                                 "Match the impurity model, sector and frequency grid") from error
+        if (subspace not in ("sampled", "full") or closure not in ("none", "singles", "doubles")
+                or type(shots) is not int or shots < 1 or type(seed) is not int or seed < 0):
+            raise _compile_error(source, "Invalid subspace, closure, shots or seed",
+                                 "Use sampled/full, none/singles/doubles and positive shots",
+                                 "QCL-E104")
+        params = {"model": model, "sector": sector, "orbital": orbital, "spin": spin,
+                  "omega": omega, "eta": eta, "subspace": subspace}
+        if subspace == "sampled":
+            params.update(shots=shots, seed=seed, closure=closure)
+        node = graph.add_node("dynamics.spectral_subspace", [],
+                              json.dumps(params, sort_keys=True), source)
+        return _Value(graph, node, "spectral_estimate")
+
+
 dynamics = _Dynamics()
 
 
@@ -1827,6 +1868,45 @@ class _Binding:
         return _Value(graph, node, "estimate", unit="kcal/mol", family="MM/GBSA")
 
 
+    @staticmethod
+    def fragments(receptor: dict[str, Any], ligand: dict[str, Any], *,
+                  residues: list[str] | None = None, cutoff_A: float = 4.0,
+                  method: str = "hf", functional: str | None = None, basis: str = "sto-3g",
+                  counterpoise: bool = True, ph: float = 7.0) -> _Value:
+        """Ligand–side-chain QM interaction energy (hartree) of a prepared complex.
+
+        Each residue (``"chain:number"``, default: the pocket within ``cutoff_A``) is cut at
+        Cα–Cβ and capped with hydrogen; GLY and PRO are skipped. The value sums the
+        counterpoise-corrected pair interactions: a pairwise-additive approximation, not
+        a binding free energy.
+        """
+        source = _source()
+        graph = _active("binding")
+        if (not isinstance(receptor, dict) or not isinstance(receptor.get("pdb_text"), str) or
+                not isinstance(ligand, dict) or not isinstance(ligand.get("source"), dict)):
+            raise _compile_error(source, "Fragments need a receptor {pdb_text} and a ligand "
+                                 "{source}", "Pass the same inputs as binding.mmgbsa")
+        if residues is not None and (not isinstance(residues, (list, tuple)) or not residues or
+                                     not all(isinstance(item, str) and ":" in item
+                                             for item in residues)):
+            raise _compile_error(source, "Residues are 'chain:number' identifiers",
+                                 "Name residues as chain:number, or omit them for the pocket")
+        if (method not in ("hf", "mp2", "dft") or (method == "dft") != bool(functional) or
+                type(cutoff_A) not in (int, float) or not 0 < cutoff_A <= 12 or
+                not isinstance(basis, str) or type(counterpoise) is not bool or
+                type(ph) not in (int, float) or not 0 <= ph <= 14):
+            raise _compile_error(source, "Invalid fragment QM settings",
+                                 "Use hf, mp2 or dft (with a functional), a 0-12 A cutoff "
+                                 "and pH 0-14", "QCL-E104")
+        params = {"receptor": receptor, "ligand": ligand,
+                  "residues": list(residues) if residues is not None else None,
+                  "cutoff_A": float(cutoff_A), "method": method, "functional": functional,
+                  "basis": basis, "counterpoise": counterpoise, "ph": float(ph)}
+        node = graph.add_node("binding.fragments", [], json.dumps(params), source)
+        return _Value(graph, node, "estimate", unit="hartree",
+                      family=f"Fragment QM ({method.upper()})")
+
+
 binding = _Binding()
 
 
@@ -1863,6 +1943,18 @@ def _active(namespace: str) -> GraphBuilder:
 
 
 QMMM_NONBONDED = ("NoCutoff", "CutoffNonPeriodic", "CutoffPeriodic", "PME", "Ewald", "LJPME")
+QMMM_SOLVERS = ("fci", "gpu_fci", "sqd")
+_DOMAIN_IMPLEMENTATIONS = {
+    "dmrg.solve": "dmrg.solve/block2", "vqe.statevector": "vqe.statevector/chemflow-sector",
+    "vqe.adapt": "vqe.adapt/chemflow-sector", "eom.ip": "eom.ip/pyscf-eom-ccsd",
+    "eom.ea": "eom.ea/pyscf-eom-ccsd", "neb": "neb/ase-climbing-image",
+    "mace.energy": "mace.energy/mace-mp-0-small", "mace.optimize": "mace.optimize/ase-bfgs",
+    "drug.dock": "drug.dock/autodock-vina", "drug.ligands": "drug.ligands/pubchem-cache",
+    "binding.fragments": "binding.fragments/chemflow-pyscf",
+    "dynamics.spectral_subspace": "dynamics.spectral_subspace/chemflow-lehmann",
+}
+# Local samplers only: a cloud QPU must go through qcl.sample and the operator QPU policy.
+QMMM_SAMPLERS = ("statevector", "aer_noisy", "gpu")
 
 
 class _QMMM:
@@ -1872,13 +1964,18 @@ class _QMMM:
     def energy(pdb: str, positions_nm: Any, qm_atoms: Any, *,
                forcefields: tuple[str, ...] = ("amber14/tip3p.xml",),
                nonbonded: str = "NoCutoff", basis: str = "sto-3g", method: str = "rhf",
-               cas: tuple[int, int] | None = None, charge: int = 0, spin: int = 0) -> _Value:
+               cas: tuple[int, int] | None = None, charge: int = 0, spin: int = 0,
+               solver: str = "fci", sampler: str = "statevector", shots: int = 4096,
+               seed: int = 0, n_batches: int = 10, max_iter: int = 5) -> _Value:
         """Total QM/MM energy (hartree) of one snapshot.
 
         ``pdb`` is PDB text, ``positions_nm`` the snapshot coordinates in nm and
         ``qm_atoms`` the QM region (whole molecules). ``method="rhf"`` is a variational
-        upper bound; ``method="casci", cas=(n_orbitals, n_electrons)`` with exact FCI is
-        equivalent within the QM/MM-CASCI model.
+        upper bound. ``method="casci", cas=(n_orbitals, n_electrons)`` solves the active
+        space with ``solver``: ``"fci"`` (CPU) or ``"gpu_fci"`` (GPU), both equivalent
+        within the QM/MM-CASCI model, or ``"sqd"`` (LUCJ samples from ``sampler``:
+        ``"statevector"`` or ``"aer_noisy"`` on a CPU, ``"gpu"`` on a GPU), a variational
+        upper bound. Place GPU solvers and samplers on a GPU.
         """
         source = _source()
         graph = _active("qmmm")
@@ -1915,13 +2012,29 @@ class _QMMM:
                 type(spin) is not int or spin < 0):
             raise _compile_error(source, "Invalid QM basis, charge or spin",
                                  "Use a basis name and integer charge and 2S")
+        if solver not in QMMM_SOLVERS or (method == "rhf" and solver != "fci"):
+            raise _compile_error(source, f"Unknown or inapplicable QM/MM solver {solver!r}",
+                                 "Use fci, gpu_fci or sqd with method='casci'", "QCL-E104")
+        if solver == "sqd" and (
+                sampler not in QMMM_SAMPLERS or
+                any(type(value) is not int or value < 1 for value in (shots, n_batches,
+                                                                      max_iter)) or
+                type(seed) is not int or seed < 0):
+            raise _compile_error(source, "Invalid QM/MM SQD sampling options",
+                                 "Use sampler " + ", ".join(QMMM_SAMPLERS) +
+                                 " with positive shots, n_batches and max_iter")
         params = {"pdb": pdb, "positions_nm": positions, "qm_atoms": region,
                   "forcefields": list(forcefields), "nonbonded": nonbonded, "basis": basis,
                   "method": method, "cas": list(cas) if cas is not None else None,
-                  "charge": charge, "spin": spin}
+                  "charge": charge, "spin": spin, "solver": solver,
+                  "scheme": "rhf" if method == "rhf" else f"casci/{solver}"}
+        if solver == "sqd":
+            params.update(sampler=sampler, shots=shots, seed=seed, n_batches=n_batches,
+                          max_iter=max_iter)
         node = graph.add_node("qmmm.energy", [], json.dumps(params, sort_keys=True), source)
-        return _Value(graph, node, "estimate", unit="hartree",
-                      family="QM/MM-" + ("RHF" if method == "rhf" else "CASCI"))
+        family = ("RHF" if method == "rhf" else
+                  {"fci": "CASCI", "gpu_fci": "CASCI(GPU FCI)", "sqd": "CASCI(SQD)"}[solver])
+        return _Value(graph, node, "estimate", unit="hartree", family=f"QM/MM-{family}")
 
 
 qmmm = _QMMM()
@@ -2004,6 +2117,53 @@ class _Drug:
         return _Value(graph, node, "record")
 
 
+    @staticmethod
+    def dock(smiles: str, receptor_pdbqt: str, *, center: tuple[float, float, float],
+             box: tuple[float, float, float], seed: int = 0) -> _Value:
+        """AutoDock Vina score (kcal/mol) of one ligand's best pose in a receptor box."""
+        source = _source()
+        graph = _active("drug")
+        _engine_available(source, "vina", "meeko", "rdkit")
+        if not isinstance(smiles, str) or not smiles.strip():
+            raise _compile_error(source, "Docking needs ligand SMILES", "Pass one SMILES")
+        if not isinstance(receptor_pdbqt, str) or "\n" not in receptor_pdbqt:
+            raise _compile_error(source, "Docking needs receptor PDBQT text",
+                                 "Pass the prepared receptor")
+        try:
+            center_values = [float(value) for value in center]
+            box_values = [float(value) for value in box]
+        except (TypeError, ValueError) as error:
+            raise _compile_error(source, "Docking center and box are three numbers each",
+                                 "Give the box centre and size in angstrom") from error
+        if (len(center_values) != 3 or len(box_values) != 3 or
+                not all(math.isfinite(value) for value in center_values + box_values) or
+                min(box_values) <= 0 or type(seed) is not int or seed < 0):
+            raise _compile_error(source, "Invalid docking box or seed",
+                                 "Use a finite centre, a positive box and a seed >= 0")
+        params = {"smiles": smiles, "receptor_pdbqt": receptor_pdbqt, "center": center_values,
+                  "box": box_values, "seed": seed}
+        node = graph.add_node("drug.dock", [], json.dumps(params), source)
+        return _Value(graph, node, "estimate", unit="kcal/mol", family="AutoDock Vina")
+
+    @staticmethod
+    def ligands(names: list[str], *, network: bool = False) -> _Value:
+        """Ligand structures from PubChem names, read from the local name cache.
+
+        ``network=True`` lets uncached names be fetched (and cached); otherwise an uncached
+        name is refused (CF-E080).
+        """
+        source = _source()
+        graph = _active("drug")
+        if (not isinstance(names, (list, tuple)) or not names or
+                not all(isinstance(name, str) and name.strip() for name in names) or
+                type(network) is not bool):
+            raise _compile_error(source, "Ligand names must be a nonempty list of names",
+                                 "Pass molecule names and network=True|False")
+        node = graph.add_node("drug.ligands", [], json.dumps(
+            {"names": list(dict.fromkeys(names)), "network": network}), source)
+        return _Value(graph, node, "record")
+
+
 drug = _Drug()
 
 
@@ -2028,6 +2188,172 @@ class _Synthesis:
 
 
 synthesis = _Synthesis()
+
+
+def _space_inputs(operator: Any, sector: Any, what: str, source: str) -> GraphBuilder:
+    """Check an operator and sector from one active space (or lattice) for a solver."""
+    if (not isinstance(operator, _Value) or operator.kind != "fermion_operator" or
+            not isinstance(sector, _Value) or sector.kind != "sector"):
+        raise _compile_error(source, f"{what} requires a FermionOperator and Sector",
+                             "Use active.hamiltonian and active.sector, or lattice.particles")
+    if operator.graph is not sector.graph or operator.parent != sector.parent:
+        raise _compile_error(source, f"{what} operator and sector refer to different spaces",
+                             "Use both projections from the same space", "QCL-E103")
+    return operator.graph
+
+
+def _engine_available(source: str, *modules: str) -> None:
+    from importlib.util import find_spec
+
+    missing = [name for name in modules if find_spec(name) is None]
+    if missing:
+        raise _compile_error(source, f"{', '.join(missing)} is unavailable",
+                             "Install the ChemFlow extra that provides it", "QCL-E401")
+
+
+def _positive_ints(source: str, message: str, **values: Any) -> None:
+    if any(type(value) is not int or value < 1 for value in values.values()):
+        raise _compile_error(source, message, "Pass positive integers for "
+                             + ", ".join(values))
+
+
+class _DMRG:
+    @staticmethod
+    def solve(operator: _Value, sector: _Value, *, bond_dimension: int = 64, sweeps: int = 10,
+              seed: int = 11, total_spin: float | None = None) -> _Value:
+        """block2 DMRG ground state of an active-space or lattice Hamiltonian.
+
+        The normalized MPS expectation value is a variational upper bound; ``total_spin``
+        targets an SU(2) spin state, otherwise the sector's S_z is used.
+        """
+        source = _source()
+        graph = _space_inputs(operator, sector, "dmrg.solve", source)
+        _engine_available(source, "pyblock2")
+        _positive_ints(source, "DMRG bond dimension and sweeps must be positive",
+                       bond_dimension=bond_dimension, sweeps=sweeps)
+        if type(seed) is not int or total_spin is not None and (
+                type(total_spin) not in (int, float) or total_spin < 0 or
+                2 * total_spin != int(2 * total_spin)):
+            raise _compile_error(source, "DMRG seed or total spin is invalid",
+                                 "Use an integer seed and a half-integer total spin")
+        params = {"bond_dimension": bond_dimension, "sweeps": sweeps, "seed": seed,
+                  "total_spin": total_spin}
+        node = graph.add_node("dmrg.solve", [operator.node_id, sector.node_id],
+                              json.dumps(params), source)
+        return _Value(graph, node, "classical_result", operator.molecule, family="DMRG",
+                      lattice=operator.lattice)
+
+
+dmrg = _DMRG()
+
+
+def _closed_shell_molecule(graph: GraphBuilder, molecule: Any, what: str,
+                           source: str) -> tuple[int, Molecule]:
+    if not isinstance(molecule, (Molecule, _Value)) or (
+            isinstance(molecule, _Value) and molecule.kind != "molecule"):
+        raise _compile_error(source, f"{what} requires a QCL Molecule",
+                             "Pass a molecule or an optimized geometry")
+    node_id, metadata = _molecule_node(graph, molecule)
+    if metadata.spin != 0:
+        raise _compile_error(source, f"{what} needs a closed-shell molecule",
+                             "Use a singlet initial state", "QCL-E105")
+    return node_id, metadata
+
+
+class _EOM:
+    """Restricted EOM-CCSD charge excitations of a closed-shell molecule (full space)."""
+
+    @staticmethod
+    def ip(molecule: Molecule | _Value) -> _Value:
+        """Vertical ionization energy E(N-1) - E(N), hartree."""
+        source = _source()
+        graph = _active("eom")
+        node_id, metadata = _closed_shell_molecule(graph, molecule, "eom.ip", source)
+        node = graph.add_node("eom.ip", [node_id], "{}", source)
+        return _Value(graph, node, "estimate", metadata, unit="hartree", family="EOM-IP-CCSD")
+
+    @staticmethod
+    def ea(molecule: Molecule | _Value) -> _Value:
+        """Vertical electron affinity E(N) - E(N+1), hartree."""
+        source = _source()
+        graph = _active("eom")
+        node_id, metadata = _closed_shell_molecule(graph, molecule, "eom.ea", source)
+        node = graph.add_node("eom.ea", [node_id], "{}", source)
+        return _Value(graph, node, "estimate", metadata, unit="hartree", family="EOM-EA-CCSD")
+
+
+eom = _EOM()
+
+NEB_METHODS = ("hf", "dft", "gfn2")
+
+
+def neb(reactant: Molecule | _Value, product: Molecule | _Value, *, method: str = "hf",
+        functional: str | None = None, images: int = 7, interpolation: str = "idpp",
+        optimizer: str = "fire", fmax: float = 0.02, maxsteps: int = 1000) -> _Value:
+    """Climbing-image NEB between two minima with HF, DFT or GFN2-xTB forces (ASE).
+
+    The result is a ReactionPath whose transition is the climbing image and whose
+    endpoints are the relaxed band ends; the band's images and energies are in its
+    provenance.
+    """
+    source = _source()
+    graph = _active("neb")
+    if not all(isinstance(item, (Molecule, _Value)) for item in (reactant, product)):
+        raise _compile_error(source, "NEB endpoints must be QCL molecules",
+                             "Pass the reactant and product geometries")
+    first, first_meta = _molecule_node(graph, reactant)
+    last, last_meta = _molecule_node(graph, product)
+    if (first_meta.basis, first_meta.charge, first_meta.spin) != (
+            last_meta.basis, last_meta.charge, last_meta.spin):
+        raise _compile_error(source, "NEB endpoints need one basis, charge and spin",
+                             "Describe both minima with the same model", "QCL-E103")
+    if (method not in NEB_METHODS or (method == "dft") != bool(functional) or
+            functional is not None and not isinstance(functional, str)):
+        raise _compile_error(source, "NEB method is hf, dft (with a functional) or gfn2",
+                             "Choose a supported force method", "QCL-E104")
+    if method == "gfn2":
+        _engine_available(source, "tblite")
+    _engine_available(source, "ase")
+    if (type(images) is not int or not 1 <= images <= 100 or
+            interpolation not in ("linear", "idpp") or optimizer not in ("fire", "bfgs") or
+            type(fmax) not in (int, float) or not math.isfinite(fmax) or fmax <= 0 or
+            type(maxsteps) is not int or maxsteps < 1):
+        raise _compile_error(source, "Invalid NEB settings",
+                             "Use 1-100 images, linear/idpp, fire/bfgs and positive fmax")
+    params = {"method": method, "functional": functional, "images": images,
+              "interpolation": interpolation, "optimizer": optimizer, "fmax": float(fmax),
+              "maxsteps": maxsteps}
+    node = graph.add_node("neb", [first, last], json.dumps(params), source)
+    return _Value(graph, node, "reaction_path", first_meta)
+
+
+class _MACE:
+    """MACE-MP-0 (small) machine-learned potential; weights from CHEMFLOW_MACE_MODEL."""
+
+    @staticmethod
+    def _molecule(molecule: Any, what: str, source: str) -> tuple[GraphBuilder, int, Molecule]:
+        graph = _active("engines.mace")
+        _engine_available(source, "mace", "torch")
+        if not isinstance(molecule, (Molecule, _Value)):
+            raise _compile_error(source, f"{what} requires a QCL Molecule",
+                                 "Pass a molecule or geometry")
+        node_id, metadata = _molecule_node(graph, molecule)
+        if metadata.charge or metadata.spin:
+            raise _compile_error(source, "MACE-MP-0 does not model charge or spin states",
+                                 "Use a neutral closed-shell molecule", "QCL-E105")
+        return graph, node_id, metadata
+
+    def energy(self, molecule: Molecule | _Value) -> _Value:
+        source = _source()
+        graph, node_id, metadata = self._molecule(molecule, "mace.energy", source)
+        node = graph.add_node("mace.energy", [node_id], "{}", source)
+        return _Value(graph, node, "estimate", metadata, unit="hartree", family="MACE-MP-0")
+
+    def optimize(self, molecule: Molecule | _Value) -> _Value:
+        source = _source()
+        graph, node_id, metadata = self._molecule(molecule, "mace.optimize", source)
+        node = graph.add_node("mace.optimize", [node_id], "{}", source)
+        return _Value(graph, node, "molecule", metadata)
 
 
 class _RDKit:
@@ -2075,6 +2401,7 @@ class _Engines:
     rdkit = _RDKit()
     sella: Any
     tblite: Any
+    mace: Any
 
 
 engines = _Engines()
@@ -2132,6 +2459,7 @@ class _Tblite:
 
 
 engines.tblite = _Tblite()
+engines.mace = _MACE()
 
 
 def _molecule_node(graph: GraphBuilder, molecule: Molecule | _Value) -> tuple[int, Molecule]:
@@ -2811,6 +3139,53 @@ class _VQE:
                                           shots_per_group, n_groups, seed, _source())
         return _Value(operator.graph, node, "estimate", operator.molecule,
                       unit="hartree", family="VQE")
+
+    @staticmethod
+    def statevector(operator: _Value, sector: _Value, *, ansatz: str = "uccsd",
+                    layers: int = 1, optimizer: str = "L-BFGS-B", maxiter: int = 200,
+                    n_starts: int = 1, init: str = "random", seed: int = 0,
+                    spin_adapted: bool = False) -> _Value:
+        """VQE on an exact sector statevector: a verification emulation, not deployable.
+
+        The optimized energy is a variational upper bound (UCCSD or LUCJ ansatz).
+        """
+        source = _source()
+        graph = _space_inputs(operator, sector, "vqe.statevector", source)
+        _positive_ints(source, "VQE layers, maxiter and n_starts must be positive",
+                       layers=layers, maxiter=maxiter, n_starts=n_starts)
+        if (ansatz not in ("uccsd", "lucj") or optimizer not in ("L-BFGS-B", "BFGS", "COBYLA")
+                or init not in ("random", "zero", "ccsd") or type(seed) is not int or
+                seed < 0 or type(spin_adapted) is not bool):
+            raise _compile_error(source, "Invalid statevector VQE configuration",
+                                 "Use uccsd/lucj, L-BFGS-B/BFGS/COBYLA and random/zero/ccsd",
+                                 "QCL-E104")
+        params = {"ansatz": ansatz, "layers": layers, "optimizer": optimizer,
+                  "maxiter": maxiter, "n_starts": n_starts, "init": init, "seed": seed,
+                  "spin_adapted": spin_adapted}
+        node = graph.add_node("vqe.statevector", [operator.node_id, sector.node_id],
+                              json.dumps(params), source)
+        return _Value(graph, node, "classical_result", operator.molecule,
+                      family=f"VQE({ansatz.upper()}, statevector)", lattice=operator.lattice)
+
+    @staticmethod
+    def adapt(operator: _Value, sector: _Value, *, threshold: float = 1e-3,
+              max_operators: int = 40, maxiter: int = 150,
+              spin_adapted: bool = False) -> _Value:
+        """ADAPT-VQE on an exact sector statevector (generalized or spin-adapted pool)."""
+        source = _source()
+        graph = _space_inputs(operator, sector, "vqe.adapt", source)
+        _positive_ints(source, "ADAPT max_operators and maxiter must be positive",
+                       max_operators=max_operators, maxiter=maxiter)
+        if (type(threshold) not in (int, float) or not math.isfinite(threshold) or
+                threshold <= 0 or type(spin_adapted) is not bool):
+            raise _compile_error(source, "ADAPT threshold must be positive",
+                                 "Use a positive gradient threshold")
+        params = {"threshold": float(threshold), "max_operators": max_operators,
+                  "maxiter": maxiter, "spin_adapted": spin_adapted}
+        node = graph.add_node("vqe.adapt", [operator.node_id, sector.node_id],
+                              json.dumps(params), source)
+        return _Value(graph, node, "classical_result", operator.molecule,
+                      family="ADAPT-VQE(statevector)", lattice=operator.lattice)
 
 
 vqe = _VQE()
@@ -3650,9 +4025,12 @@ class Plan:
                                                       if node["op"] in ("dft.rks", "dft.uks") and
                                                       node["params"].get("solvent") else
                                                       f"{node['op']}/chemflow-rdkit"
-                                                      if node["op"].startswith(("rdkit.", "drug.")) else
+                                                      if node["op"].startswith("rdkit.") or
+                                                      node["op"] in ("drug.filter", "drug.descriptors") else
                                                       "qmmm.energy/chemflow-openmm-pyscf"
                                                       if node["op"] == "qmmm.energy" else
+                                                      _DOMAIN_IMPLEMENTATIONS[node["op"]]
+                                                      if node["op"] in _DOMAIN_IMPLEMENTATIONS else
                                                       "synthesis.routes/aizynthfinder-4.4.1"
                                                       if node["op"] == "synthesis.routes" else
                                                       f"{node['op']}/chemflow-pyscf"),

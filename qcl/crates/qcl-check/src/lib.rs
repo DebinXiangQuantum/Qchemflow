@@ -130,6 +130,14 @@ pub fn check(graph: &Graph) -> Vec<Diagnostic> {
                         "Declare it in qcl-ir/primitives.toml with a worker implementation"
                             .to_string(),
                     )),
+                    Some(_) if qmmm_gpu_mismatch(node, &device.kind) => Some((
+                        format!(
+                            "qmmm.energy has no {} implementation for this solver",
+                            device.kind
+                        ),
+                        "Place GPU FCI or GPU-sampled SQD on a GPU and other solvers on a CPU"
+                            .to_string(),
+                    )),
                     Some(_) if native_engine && device.kind != "cpu" => Some((
                         format!("{} has no {} implementation", node.op, device.kind),
                         "Native CI is available on CPU only".to_string(),
@@ -457,6 +465,17 @@ pub fn check(graph: &Graph) -> Vec<Diagnostic> {
         }
     }
     diagnostics
+}
+
+/// QM/MM runs on a GPU exactly when its CASCI solver does (GPU FCI, or SQD sampled on a GPU).
+fn qmmm_gpu_mismatch(node: &Node, kind: &str) -> bool {
+    if node.op != "qmmm.energy" {
+        return false;
+    }
+    let solver = node.params.get("solver").and_then(|value| value.as_str());
+    let sampler = node.params.get("sampler").and_then(|value| value.as_str());
+    let gpu_solver = solver == Some("gpu_fci") || (solver == Some("sqd") && sampler == Some("gpu"));
+    (kind == "gpu") != gpu_solver
 }
 
 #[cfg(test)]

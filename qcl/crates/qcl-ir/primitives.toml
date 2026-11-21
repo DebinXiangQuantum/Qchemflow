@@ -582,15 +582,16 @@ devices = ["cpu"]
 relation = "equivalent"
 
 # ---- QM/MM, embedding, ligands and synthesis -------------------------------------
-# Electrostatic QM/MM single point (OpenMM system + PySCF QM region). RHF is a
-# variational bound and CASCI exact FCI is equivalent within the QM/MM-CASCI model.
+# Electrostatic QM/MM single point (OpenMM system + PySCF QM region). The CASCI region is
+# solved by exact FCI (CPU or GPU) or by SQD (statevector, noisy Aer or GPU sampler); GPU
+# placement needs a GPU solver or sampler (qcl-check).
 ["qmmm.energy"]
 kind = "compute"
 output = "estimate"
-devices = ["cpu"]
+devices = ["cpu", "gpu"]
 relation = "param"
-relation_param = "method"
-relations = { rhf = "variational_upper_bound", casci = "equivalent" }
+relation_param = "scheme"
+relations = { rhf = "variational_upper_bound", "casci/fci" = "equivalent", "casci/gpu_fci" = "equivalent", "casci/sqd" = "variational_upper_bound" }
 
 # Embedded wave-function theory over atomic fragments. Only the full bath with an FCI
 # fragment solver reproduces the full-space exact energy.
@@ -619,3 +620,90 @@ devices = ["cpu"]
 kind = "compute"
 output = "record"
 devices = ["cpu"]
+
+# ---- further correlated solvers ----------------------------------------------------
+# block2 DMRG: the normalized MPS expectation value is a variational upper bound.
+["dmrg.solve"]
+kind = "compute"
+output = "classical_result"
+devices = ["cpu"]
+relation = "variational_upper_bound"
+
+# Exact-statevector VQE and ADAPT-VQE (emulation, not deployable): upper bounds.
+["vqe.statevector"]
+kind = "compute"
+output = "classical_result"
+devices = ["cpu"]
+relation = "variational_upper_bound"
+
+["vqe.adapt"]
+kind = "compute"
+output = "classical_result"
+devices = ["cpu"]
+relation = "variational_upper_bound"
+
+# EOM-CCSD ionization energy and electron affinity of a closed-shell molecule.
+["eom.ip"]
+kind = "compute"
+output = "estimate"
+devices = ["cpu"]
+relation = "approximate"
+
+["eom.ea"]
+kind = "compute"
+output = "estimate"
+devices = ["cpu"]
+relation = "approximate"
+
+# ---- paths and potentials ----------------------------------------------------------
+# ASE climbing-image NEB between two minima (HF, DFT or GFN2 forces).
+["neb"]
+kind = "compute"
+output = "reaction_path"
+devices = ["cpu"]
+
+# MACE-MP-0 machine-learned potential: equivalent to the potential it evaluates, a model
+# change with respect to any electronic-structure energy.
+["mace.energy"]
+kind = "compute"
+output = "estimate"
+devices = ["cpu"]
+relation = "equivalent"
+
+["mace.optimize"]
+kind = "compute"
+output = "molecule"
+devices = ["cpu"]
+
+# ---- ligands and binding -----------------------------------------------------------
+# AutoDock Vina score of the best pose found by the seeded search.
+["drug.dock"]
+kind = "compute"
+output = "estimate"
+devices = ["cpu"]
+relation = "approximate"
+
+# PubChem name resolution through the local name cache (network only when declared).
+["drug.ligands"]
+kind = "compute"
+output = "record"
+devices = ["cpu"]
+
+# Counterpoise-corrected ligand–side-chain QM interactions of a prepared complex: a
+# pairwise-additive fragment approximation.
+["binding.fragments"]
+kind = "compute"
+output = "estimate"
+devices = ["cpu"]
+relation = "approximate"
+
+# ---- spectral functions ------------------------------------------------------------
+# Lehmann spectral function from Rayleigh-Ritz spectra in sampled (configuration
+# recovery) or full determinant subspaces of the N and N±1 sectors.
+["dynamics.spectral_subspace"]
+kind = "compute"
+output = "spectral_estimate"
+devices = ["cpu"]
+relation = "param"
+relation_param = "subspace"
+relations = { full = "equivalent", sampled = "approximate" }

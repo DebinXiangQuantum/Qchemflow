@@ -356,10 +356,19 @@ Domain operations (implemented; CPU):
 
 | Operation | Result | Relation |
 |---|---|---|
-| `qcl.qmmm.energy(pdb, positions_nm, qm_atoms, forcefields=, nonbonded=, basis=, method="rhf" \| "casci", cas=)` | electrostatic QM/MM total energy (OpenMM system, PySCF QM region) | RHF: variational upper bound; CASCI/FCI: equivalent within the QM/MM-CASCI model |
+| `qcl.qmmm.energy(pdb, positions_nm, qm_atoms, forcefields=, nonbonded=, basis=, method="rhf" \| "casci", cas=, solver="fci" \| "gpu_fci" \| "sqd", sampler="statevector" \| "aer_noisy" \| "gpu")` | electrostatic QM/MM total energy (OpenMM system, PySCF QM region); GPU FCI and GPU-sampled SQD are placed on a GPU (`QCL-E203` otherwise) | RHF and SQD: variational upper bound; CASCI by (GPU) FCI: equivalent within the QM/MM-CASCI model |
 | `qcl.embedding.ewf(H, sector, bath="full" \| "dmet" \| "bno", solver="fci" \| "ccsd")` | embedded wave-function energy over atomic (IAO) fragments of a full-space RHF molecule | full bath with FCI fragments: equivalent; otherwise approximate |
 | `qcl.drug.descriptors(ligands)`, `qcl.drug.filter(ligands, rules=)` | RDKit descriptors; Lipinski, PAINS and Brenk alerts (a `Record`) | none: a screen, not an estimate |
 | `qcl.synthesis.routes(target, stock=, iterations=, time_limit_s=)` | AiZynthFinder 4.4.1 routes in its isolated environment (a `Record`) | none |
+| `qcl.dmrg.solve(H, sector, bond_dimension=, sweeps=, seed=, total_spin=)` | block2 DMRG of an active-space or lattice Hamiltonian (`.energy`) | variational upper bound |
+| `qcl.vqe.statevector(H, sector, ansatz="uccsd" \| "lucj", ...)`, `qcl.vqe.adapt(H, sector, threshold=, ...)` | VQE and ADAPT-VQE on an exact sector statevector: verification emulations, not deployable (`.energy`) | variational upper bound |
+| `qcl.eom.ip(mol)`, `qcl.eom.ea(mol)` | vertical EOM-CCSD ionization energy and electron affinity of a closed-shell molecule | approximate |
+| `qcl.neb(reactant, product, method="hf" \| "dft" \| "gfn2", images=, ...)` | climbing-image NEB (ASE): a `ReactionPath` whose transition is the climbing image, band energies in its provenance | none |
+| `qcl.engines.mace.energy(mol)`, `qcl.engines.mace.optimize(mol)` | MACE-MP-0 (small) potential energy and BFGS minimum of a neutral closed-shell molecule | equivalent to the potential (a model change against electronic-structure energies) |
+| `qcl.drug.dock(smiles, receptor_pdbqt, center=, box=, seed=)` | AutoDock Vina score (kcal/mol) of the seeded search's best pose | approximate |
+| `qcl.drug.ligands(names, network=False)` | PubChem structures from the local name cache; uncached names need `network=True` (a `Record`) | none |
+| `qcl.binding.fragments(receptor, ligand, residues=, cutoff_A=, method="hf" \| "mp2" \| "dft", basis=, counterpoise=)` | counterpoise-corrected ligand–side-chain QM interactions of the prepared complex, summed over residues (hartree) | approximate (pairwise-additive fragments) |
+| `qcl.dynamics.spectral_subspace(model, sector, orbital=, spin=, omega=, eta=, subspace="sampled" \| "full", shots=, seed=, closure=)` | Lehmann spectral function from Rayleigh–Ritz spectra in sampled (configuration recovery, ladder and closure extension) or full determinant subspaces | full: equivalent; sampled: approximate |
 
 A `Record` holds `data` and `provenance`; it is returned from a plan but takes no part
 in estimate arithmetic or gates.

@@ -476,7 +476,12 @@ tools through the MCP server's `qcl` profile.
 The scientific operations of ChemFlow's earlier domain packs are QCL primitives:
 `qcl.qmmm.energy` (electrostatic QM/MM), `qcl.embedding.ewf` (embedded wave-function
 theory), `qcl.drug.descriptors` and `qcl.drug.filter` (RDKit ligand screens) and
-`qcl.synthesis.routes` (AiZynthFinder). `chemflow bench list` and
+`qcl.synthesis.routes` (AiZynthFinder), as are DMRG (`qcl.dmrg.solve`), statevector and
+ADAPT-VQE (`qcl.vqe.statevector`, `qcl.vqe.adapt`), EOM-CCSD (`qcl.eom.ip`, `qcl.eom.ea`),
+climbing-image NEB (`qcl.neb`), MACE (`qcl.engines.mace`), docking and PubChem names
+(`qcl.drug.dock`, `qcl.drug.ligands`), fragment QM binding (`qcl.binding.fragments`),
+subspace Lehmann spectra (`qcl.dynamics.spectral_subspace`) and the QM/MM CASCI solvers
+(`qcl.qmmm.energy(..., solver="gpu_fci" | "sqd")`). `chemflow bench list` and
 `chemflow bench run <pack> <name>` compare QCL plans with independent oracles.
 
 CPU plans run in workers forked from a pre-warmed server (`qcl._zygote`), so a plan does
