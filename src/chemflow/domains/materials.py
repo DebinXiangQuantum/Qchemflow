@@ -10,6 +10,23 @@ from chemflow.types import ConstantLedger, Hamiltonian, OrbitalSpace, Sector
 from chemflow.units import Q
 
 
+def _kernel(mf, dm0):
+    """Run an SCF; without DIIS if PySCF's DIIS extrapolation fails.
+
+    A singular DIIS matrix makes PySCF 2.14 raise from its own error handler under NumPy
+    2.4 (it names ``numpy.linalg.linalg``). Damping and the level shift still apply.
+    """
+    try:
+        mf.kernel(dm0=dm0)
+        return False
+    except (np.linalg.LinAlgError, AttributeError) as error:
+        if isinstance(error, AttributeError) and "linalg" not in str(error):
+            raise
+        mf.diis = False
+        mf.kernel(dm0=dm0)
+        return True
+
+
 def site_reference(h1, eri, n_alpha, n_beta):
     from pyscf import gto, scf
 
@@ -25,7 +42,7 @@ def site_reference(h1, eri, n_alpha, n_beta):
     mf.max_cycle = 200
     mf.damp = 0.5
     mf.level_shift = 0.5
-    mf.kernel(dm0=np.eye(len(h1)) * mol.nelectron / len(h1))
+    without_diis = _kernel(mf, np.eye(len(h1)) * mol.nelectron / len(h1))
     attempts = ["restricted"]
     stable = False
     if mf.converged:
@@ -44,13 +61,13 @@ def site_reference(h1, eri, n_alpha, n_beta):
         density = np.zeros((2, len(h1), len(h1)))
         density[0, ordering[:n_alpha], ordering[:n_alpha]] = 1
         density[1, ordering[::-1][:n_beta], ordering[::-1][:n_beta]] = 1
-        mf.kernel(dm0=density)
+        without_diis |= _kernel(mf, density)
         if mf.converged:
             orbitals, _, stable, _ = mf.stability(return_status=True)
             for _ in range(3):
                 if stable:
                     break
-                mf.kernel(dm0=mf.make_rdm1(orbitals, mf.mo_occ))
+                without_diis |= _kernel(mf, mf.make_rdm1(orbitals, mf.mo_occ))
                 orbitals, _, stable, _ = mf.stability(return_status=True)
     if not mf.converged:
         raise ValueError("Lattice mean-field reference did not converge")
@@ -58,7 +75,8 @@ def site_reference(h1, eri, n_alpha, n_beta):
         raise ValueError("Lattice mean-field reference is internally unstable")
     mf.chemflow_diagnostics = {"scf_settings": {
         "damping": mf.damp, "level_shift": mf.level_shift, "conv_tol": mf.conv_tol,
-        "max_cycle": mf.max_cycle, "fractional_occupation": False, "attempts": attempts},
+        "max_cycle": mf.max_cycle, "fractional_occupation": False, "attempts": attempts,
+        "diis": not without_diis},
         "stability": {"internal": bool(stable)}, "reference": mf.__class__.__name__}
     return mf
 
