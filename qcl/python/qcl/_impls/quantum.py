@@ -36,6 +36,10 @@ def _op_qubit_hamiltonian(ctx, node, identifier, operation, inputs):
                           }}
 
 
+# lqcloud backends with a circuit sampling path; MQ02 is a chain, QZ03 a grid.
+SAMPLING_BACKENDS = ("MQ02", "QZ03")
+
+
 @implements("sample")
 def _op_sample(ctx, node, identifier, operation, inputs):
     values = ctx.values
@@ -59,6 +63,7 @@ def _op_sample(ctx, node, identifier, operation, inputs):
     shots = node["params"]["shots"]
     seed = node["params"]["seed"]
     simulator_host = device["simulator_host"]
+    qpu_diagnostics = None
     if custom:
         circuit = CircuitSpec(ansatz="custom", n_orb=0, n_alpha=0, n_beta=0,
                               n_qubits=inputs[0]["n_qubits"],
@@ -73,7 +78,8 @@ def _op_sample(ctx, node, identifier, operation, inputs):
         prep = prepare_sector_state(data, data.sector.model_dump(), store,
                                     ansatz=inputs[0]["ansatz"],
                                     params=inputs[0].get("params"),
-                                    materialize=simulator_host is not None)
+                                    materialize=simulator_host is not None,
+                                    final_rotation=inputs[0].get("final_rotation", True))
     if custom and simulator_host is not None and simulator_host.startswith("gpu"):
         import cupy as cp
         import numpy as np
@@ -141,24 +147,28 @@ def _op_sample(ctx, node, identifier, operation, inputs):
         samples = sample_configurations(prep, shots, seed, store=store)
         implementation = "sample/chemflow-statevector"
         resources = {"sim_shots": shots}
-    elif device["provider"] == "lqcloud" and device["backend"] == "MQ02":
-        from chemflow.backends.lqcloud import LqcloudBackend
+    elif device["provider"] == "lqcloud" and device["backend"] in SAMPLING_BACKENDS:
+        from chemflow.backends.lqcloud import LqcloudBackend, dynamic_decoupling
 
         policy = request.get("cloud_qpu_policy")
         billing_ceiling = (policy["max_cost"] / policy["forecast_cost"]
                            if policy and policy["forecast_cost"] > 0 else None)
         backend = (qpu_backend_factory(device) if qpu_backend_factory else
-                   LqcloudBackend(backend="MQ02",
+                   LqcloudBackend(backend=device["backend"],
                                   max_billing_multiplier=billing_ceiling))
+        options = {}
+        decoupling = dynamic_decoupling((device.get("options") or {}).get("dd", "none"))
+        if decoupling is not None:
+            options["dynamic_decoupling"] = decoupling
         if "repetition" in node["params"]:
-            computed = backend.sample(store, prep, shots, seed,
-                                      repetition=node["params"]["repetition"])
-        else:
-            computed = backend.sample(store, prep, shots, seed)
+            options["repetition"] = node["params"]["repetition"]
+        computed = backend.sample(store, prep, shots, seed, **options)
         samples = computed.value
-        implementation = "sample/chemflow-lqcloud-mq02"
+        implementation = f"sample/chemflow-lqcloud-{device['backend'].lower()}"
         resources = computed.cost
         billing = computed.diagnostics.get("billing")
+        qpu_diagnostics = {key: value for key, value in computed.diagnostics.items()
+                           if key != "billing"}
     else:
         raise ValueError("No QPU implementation is registered for this device")
     expected_source = "quantum_simulator" if simulator_host else "qpu"
@@ -179,7 +189,16 @@ def _op_sample(ctx, node, identifier, operation, inputs):
     }
     if simulator_host is None and billing is not None:
         provenance["billing"] = billing
+    if simulator_host is None and qpu_diagnostics:
+        provenance["qpu_diagnostics"] = qpu_diagnostics
+    # Samples of an LUCJ circuit without its final rotation are in the rotated orbital
+    # basis; consumers must rotate the Hamiltonian (sqd.diagonalize does).
+    rotation = (list(prep.circuit.layers[0]) if prep.circuit is not None and
+                not prep.circuit.final_rotation else None)
+    if rotation is not None:
+        provenance["orbital_basis"] = "LUCJ-rotated (final orbital rotation omitted)"
     values[identifier] = {
+        "orbital_rotation": rotation,
         "counts": samples.counts, "shots": samples.shots,
         "source": samples.source, "device": device["id"],
         "encoding_id": samples.encoding_id, "hamiltonian_id": prep.hamiltonian_id,
@@ -446,8 +465,9 @@ def _op_samples_merge(ctx, node, identifier, operation, inputs):
 
     first = inputs[0]
     if any((item["encoding_id"], item["hamiltonian_id"], item["basis"],
-            item["source"]) != (first["encoding_id"], first["hamiltonian_id"],
-                               first["basis"], first["source"])
+            item["source"], item.get("orbital_rotation")) != (
+               first["encoding_id"], first["hamiltonian_id"], first["basis"],
+               first["source"], first.get("orbital_rotation"))
            for item in inputs[1:]):
         raise ValueError("Cannot merge incompatible QPU samples")
     counts = Counter()
@@ -460,6 +480,7 @@ def _op_samples_merge(ctx, node, identifier, operation, inputs):
         "encoding_id": first["encoding_id"],
         "hamiltonian_id": first["hamiltonian_id"],
         "basis": first["basis"], "seed": first["seed"],
+        "orbital_rotation": first.get("orbital_rotation"),
         "job_ids": [job for item in inputs for job in item["job_ids"]],
         "parts": parts,
         "provenance": {"question": first["provenance"]["question"],
@@ -468,6 +489,28 @@ def _op_samples_merge(ctx, node, identifier, operation, inputs):
                        "device": "multi", "parts": [item["provenance"]
                                                     for item in inputs]},
     }
+
+
+def _rotated_space(data, store, vector):
+    """The active space with its integrals in the orbitals an open LUCJ circuit measures."""
+    import copy
+    import dataclasses
+
+    import numpy as np
+
+    from chemflow.impls.lucj import LucjParams, rotated_integrals
+
+    n_orb = data.sector.n_orb
+    h1, h2 = rotated_integrals(store.get(data.hamiltonian.h1_ref),
+                               store.get(data.hamiltonian.h2_ref),
+                               LucjParams.from_vector(np.asarray(vector), n_orb).kparams)
+    hamiltonian = data.hamiltonian.model_copy(update={"h1_ref": store.put(h1),
+                                                      "h2_ref": store.put(h2)})
+    if dataclasses.is_dataclass(data):
+        return dataclasses.replace(data, hamiltonian=hamiltonian)
+    rotated = copy.copy(data)
+    rotated.hamiltonian = hamiltonian
+    return rotated
 
 
 @implements("sqd.diagonalize")
@@ -494,6 +537,8 @@ def _op_sqd_diagonalize(ctx, node, identifier, operation, inputs):
                       device=bits["device"], job_ids=bits["job_ids"])
     recovery = node["params"].get("recovery", True)
     extend = node["params"].get("extend", True)
+    if bits.get("orbital_rotation") is not None:
+        data = _rotated_space(data, store, bits["orbital_rotation"])
     energy, diagnostics = sqd_sector(data, data.sector, store, samples,
                                      seed=node["params"]["seed"], recovery=recovery,
                                      with_ext=extend,
@@ -519,6 +564,8 @@ def _op_sqd_diagonalize(ctx, node, identifier, operation, inputs):
             "sector_dimension": diagnostics["sector_dimension"],
             "valid_fraction": diagnostics["valid_fraction"],
             "recovery": recovery, "extend": extend,
+            **({"orbital_basis": "LUCJ-rotated: integrals rotated to the sampled basis"}
+               if bits.get("orbital_rotation") is not None else {}),
             "batch_spread": diagnostics["batch_spread"],
             "validity_flags": ["SQD subspace bias is not bounded by batch variance"],
             **({"sample_billing": bits["provenance"]["billing"]}

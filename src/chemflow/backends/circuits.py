@@ -100,6 +100,8 @@ def build_circuit(spec: CircuitSpec) -> QuantumCircuit:
                     for control in reversed(support[:-1]):
                         circuit.cx(control, support[-1])
                     circuit.compose(rotation.inverse(), inplace=True)
+    if not spec.final_rotation and (spec.ansatz != "lucj" or len(spec.layers) != 1):
+        raise ValueError("Omitting the final rotation needs a one-layer LUCJ circuit")
     for vector in spec.layers if spec.ansatz == "lucj" else ():
         layer = LucjParams.from_vector(np.asarray(vector), n_orb)
         if len(vector) != layer.size:
@@ -117,7 +119,8 @@ def build_circuit(spec: CircuitSpec) -> QuantumCircuit:
         for index, angle in enumerate(layer.j_opp):
             orbital = 4 * index
             circuit.cp(float(angle), orbital, n_orb + orbital)
-        circuit.compose(forward.inverse(), inplace=True)
+        if spec.final_rotation:
+            circuit.compose(forward.inverse(), inplace=True)
     if spec.measurement_basis is not None:
         from chemflow.quantum.pauli import rotation_circuit
 

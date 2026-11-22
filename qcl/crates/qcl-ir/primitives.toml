@@ -593,6 +593,14 @@ relation = "param"
 relation_param = "scheme"
 relations = { rhf = "variational_upper_bound", "casci/fci" = "equivalent", "casci/gpu_fci" = "equivalent", "casci/sqd" = "variational_upper_bound" }
 
+# Embedded RHF of a QM region in the MM point charges; its active spaces carry the
+# residual MM energy, so active-space solvers return QM/MM totals.
+["qmmm.scf"]
+kind = "compute"
+output = "scf_result"
+devices = ["cpu"]
+relation = "variational_upper_bound"
+
 # Embedded wave-function theory over atomic fragments. Only the full bath with an FCI
 # fragment solver reproduces the full-space exact energy.
 ["embedding.ewf"]

@@ -72,6 +72,55 @@ def _op_qmmm_energy(ctx, node, identifier, operation, inputs):
     }
 
 
+@implements("qmmm.scf")
+def _op_qmmm_scf(ctx, node, identifier, operation, inputs):
+    import io
+    from types import SimpleNamespace
+
+    import openmm
+    import pyscf
+    from openmm import app
+
+    from chemflow.domains.qmmm import _check_region, mm_system
+    from chemflow.plugins.openmm import QMMMCalculator
+    from chemflow.types.model import ElectronicModel
+
+    device = _cpu(node, "QM/MM SCF")
+    params = node["params"]
+    system = mm_system(ctx.store, params["pdb"], params["forcefields"], params["nonbonded"])
+    topology = app.PDBFile(io.StringIO(
+        ctx.store.get(system.topology_ref).tobytes().decode())).topology
+    mm = openmm.XmlSerializer.deserialize(ctx.store.get(system.system_ref).tobytes().decode())
+    _check_region(topology, params["qm_atoms"])
+    calculator = QMMMCalculator(topology, mm, params["qm_atoms"], params["basis"],
+                                charge=params["charge"], spin=params["spin"], method="rhf")
+    mean_field, mm_energy = calculator.embedded_scf(params["positions_nm"])
+    # Read by active_from_scf: active spaces of this mean field carry the MM energy.
+    mean_field.chemflow_environment_energy = mm_energy
+    model = ElectronicModel(basis=params["basis"], reference="RHF")
+    atoms = "; ".join(f"{symbol} {x:.10f} {y:.10f} {z:.10f}" for symbol, (x, y, z) in
+                      zip(mean_field.mol.elements, mean_field.mol.atom_coords(unit="Angstrom"),
+                          strict=True))
+    # The geometry identity of the QM region, as active_from_scf reads it.
+    identity = SimpleNamespace(atom=atoms, unit="angstrom", charge=params["charge"],
+                               spin=params["spin"])
+    data = SimpleNamespace(mf=mean_field, mol=identity, model=model)
+    values = ctx.values
+    values[identifier] = {
+        "data": data, "energy": float(mean_field.e_tot + mm_energy), "device": device["id"],
+        "gpu_scf": False,
+        "question": {"atoms": atoms, "charge": params["charge"], "spin": params["spin"],
+                     "unit": "angstrom", "property": "qmmm_total_energy",
+                     "system_id": system.id, "qm_atoms": params["qm_atoms"],
+                     "embedding": "electrostatic"},
+        "method": {"family": "QM/MM-RHF", "basis": params["basis"],
+                   "forcefields": params["forcefields"], "nonbonded": params["nonbonded"],
+                   "components": {"qm": float(mean_field.e_tot), "mm": float(mm_energy)}},
+        "implementation": "qmmm.scf/chemflow-openmm-pyscf",
+        "versions": {"pyscf": pyscf.__version__, "openmm": openmm.__version__},
+    }
+
+
 @implements("embedding.ewf")
 def _op_embedding_ewf(ctx, node, identifier, operation, inputs):
     import pyscf

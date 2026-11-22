@@ -138,7 +138,8 @@ def _op_kernel_hf(ctx, node, identifier, operation, inputs):
 def _op_kernel_lucj(ctx, node, identifier, operation, inputs):
     values = ctx.values
     vector = inputs[1]["vector"] if len(inputs) == 2 else node["params"]["params"]
-    values[identifier] = {**inputs[0], "ansatz": "lucj", "params": vector}
+    values[identifier] = {**inputs[0], "ansatz": "lucj", "params": vector,
+                          "final_rotation": node["params"].get("final_rotation", True)}
 
 
 @implements("kernel.custom")

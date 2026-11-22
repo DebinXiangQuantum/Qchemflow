@@ -181,6 +181,10 @@ def hea(q: qcl.Qubits[8], theta: qcl.Params[16]):
 - Kernels are device-independent. Each kernel is lowered separately for every target QPU (native gates, connectivity, transpile options) and checked at compile time for qubit count and parameter shapes.
 - Kernels support mid-circuit measurement (`qcl.measure`) and classical feedback (`qcl.cond` inside a kernel), subject to the target's capabilities. Unsupported features are error `QCL-E206`.
 - Library kernels such as `qcl.kernels.lucj(act)` (built with ffsim) are host constructions.
+- `qcl.kernels.lucj(act, final_rotation=False)` omits the closing orbital rotation, about
+  half the two-qubit gates. Its samples are in the rotated orbital basis, and
+  `sqd.diagonalize` rotates the Hamiltonian to match; this is an exact change of basis.
+  Samples of different bases cannot be merged.
 
 ---
 
@@ -357,6 +361,7 @@ Domain operations (implemented; CPU):
 | Operation | Result | Relation |
 |---|---|---|
 | `qcl.qmmm.energy(pdb, positions_nm, qm_atoms, forcefields=, nonbonded=, basis=, method="rhf" \| "casci", cas=, solver="fci" \| "gpu_fci" \| "sqd", sampler="statevector" \| "aer_noisy" \| "gpu", extend=False)` | electrostatic QM/MM total energy (OpenMM system, PySCF QM region); GPU FCI and GPU-sampled SQD are placed on a GPU (`QCL-E203` otherwise); `extend=True` adds the single excitations of the leading sampled configurations to the SQD subspace | RHF and SQD: variational upper bound; CASCI by (GPU) FCI: equivalent within the QM/MM-CASCI model |
+| `qcl.qmmm.scf(pdb, positions_nm, qm_atoms, forcefields=, nonbonded=, basis=, charge=, spin=)` | electrostatically embedded RHF of the QM region as an SCF result; `qcl.active_space` of it carries the residual MM energy in its constant, so active-space solvers and quantum kernels give QM/MM totals | variational upper bound |
 | `qcl.embedding.ewf(H, sector, bath="full" \| "dmet" \| "bno", solver="fci" \| "ccsd")` | embedded wave-function energy over atomic (IAO) fragments of a full-space RHF molecule | full bath with FCI fragments: equivalent; otherwise approximate |
 | `qcl.drug.descriptors(ligands)`, `qcl.drug.filter(ligands, rules=)` | RDKit descriptors; Lipinski, PAINS and Brenk alerts (a `Record`) | none: a screen, not an estimate |
 | `qcl.synthesis.routes(target, stock=, iterations=, time_limit_s=)` | AiZynthFinder 4.4.1 routes in its isolated environment (a `Record`) | none |
@@ -468,7 +473,8 @@ q0 = qpus[0].with_options(transpile=3, mitigate="readout")   # mitigation affect
 - Options per device kind:
   - CPU: `threads`.
   - GPU: `precision` (default `"fp64"`), `memory_limit_gb`.
-  - QPU: `transpile`, `mitigate`, `max_shots`.
+  - QPU: `transpile`, `mitigate`, `max_shots`, `dd` (`"none"`, `"cpmg"` or `"cp"`: the
+    platform's automatic dynamical decoupling of idle windows; part of the job identity).
 - `qcl.Cluster.local()` detects local CPUs and GPUs. It adds one statevector simulator per GPU, or one CPU simulator if there is no GPU, as QPU devices.
 - Simulators are QPU devices backed by a classical device. The planner accounts for their memory on that device.
 

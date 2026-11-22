@@ -54,7 +54,10 @@ MP2 fragments, docking and QM/MM SQD up to 28 qubits),
 `apps/hydrogen_chain.py` (H12 equation of state against FCI, CCSD(T), DMRG and
 EWF) and `apps/diels_alder.py` (Sella/IRC transition state, CCSD(T) barrier and
 28-qubit SQD). Results and timings are in `docs/application-runs.md`;
-`docs/error-mitigation.md` designs mitigation for hardware runs.
+`docs/error-mitigation.md` designs mitigation for hardware runs;
+`apps/hardware_applications.py` runs those applications' quantum parts on lqcloud
+MQ02 and QZ03 with mitigation variants, and `apps/hardware_analysis.py` and
+`apps/timing_comparison.py` analyse and time them (`docs/hardware-runs.md`).
 PCM/RHF runs on CPU or GPU; GPU PCM does not accept a precomputed ERI override.
 `apps/h2_pcm.py` chooses the first available GPU or a CPU and computes
 `E(PCM) - E(gas)`; the CPU path reuses integrals.

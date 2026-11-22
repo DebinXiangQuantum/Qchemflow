@@ -102,11 +102,50 @@ class QMMMCalculator:
                     put(index, *parameters)
         self.mm_atoms = [index for index in range(len(self.atoms)) if index not in selection]
 
-    def energy(self, positions):
+    def _coordinates(self, positions):
         coordinates = np.asarray(positions.value_in_unit(unit.nanometer)
                                  if unit.is_quantity(positions) else positions, dtype=float)
         if coordinates.shape != (len(self.atoms), 3) or not np.isfinite(coordinates).all():
             raise ValueError("Positions must be finite (n_atoms, 3) coordinates")
+        return coordinates
+
+    def embedded_scf(self, positions):
+        """Converged embedded mean field and the residual MM energy (hartree)."""
+        coordinates = self._coordinates(positions)
+        return self._mean_field(coordinates), self._mm_energy(coordinates)
+
+    def _mm_energy(self, coordinates):
+        integrator = openmm.VerletIntegrator(0.001)
+        context = openmm.Context(self.system, integrator,
+                                 openmm.Platform.getPlatformByName("Reference"))
+        try:
+            context.setPositions(coordinates * unit.nanometer)
+            return context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(
+                unit.kilojoule_per_mole) / KJ_PER_HARTREE
+        finally:
+            del context
+            del integrator
+
+    def energy(self, positions):
+        coordinates = self._coordinates(positions)
+        reference = self._mean_field(coordinates)
+        qm_energy = reference.e_tot
+        solver_run = {"method": self.method, "converged": True}
+        if self.cas is not None:
+            calculation = mcscf.CASCI(reference, *self.cas)
+            if self.fcisolver is not None:
+                calculation.fcisolver = self.fcisolver
+            qm_energy = calculation.kernel()[0]
+            solver_run = deepcopy(getattr(calculation.fcisolver, "last_run",
+                                           {"method": "fci", "device": "local"}))
+        mm_energy = self._mm_energy(coordinates)
+        return {"total": float(qm_energy + mm_energy), "qm": float(qm_energy),
+                "mm": float(mm_energy), "unit": "hartree",
+                "provenance": {"qm_solver": solver_run, "embedding": "electrostatic",
+                               "qm_atoms": list(self.qm_atoms), "basis": self.basis,
+                               "charge": self.charge, "spin": self.spin}}
+
+    def _mean_field(self, coordinates):
         molecule = gto.M(atom=[(self.atoms[index].element.symbol, coordinates[index] * 10)
                                for index in self.qm_atoms], unit="angstrom", basis=self.basis,
                          charge=self.charge, spin=self.spin, verbose=0)
@@ -121,30 +160,7 @@ class QMMMCalculator:
         reference.run(conv_tol=1e-11)
         if not reference.converged:
             raise RuntimeError("Embedded SCF did not converge")
-        qm_energy = reference.e_tot
-        solver_run = {"method": self.method, "converged": True}
-        if self.cas is not None:
-            calculation = mcscf.CASCI(reference, *self.cas)
-            if self.fcisolver is not None:
-                calculation.fcisolver = self.fcisolver
-            qm_energy = calculation.kernel()[0]
-            solver_run = deepcopy(getattr(calculation.fcisolver, "last_run",
-                                           {"method": "fci", "device": "local"}))
-        integrator = openmm.VerletIntegrator(0.001)
-        context = openmm.Context(self.system, integrator,
-                                 openmm.Platform.getPlatformByName("Reference"))
-        try:
-            context.setPositions(coordinates * unit.nanometer)
-            mm_energy = context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(
-                unit.kilojoule_per_mole) / KJ_PER_HARTREE
-        finally:
-            del context
-            del integrator
-        return {"total": float(qm_energy + mm_energy), "qm": float(qm_energy),
-                "mm": float(mm_energy), "unit": "hartree",
-                "provenance": {"qm_solver": solver_run, "embedding": "electrostatic",
-                               "qm_atoms": list(self.qm_atoms), "basis": self.basis,
-                               "charge": self.charge, "spin": self.spin}}
+        return reference
 
     def energies(self, trajectory):
         """Evaluate snapshots, without integrating quantum forces."""

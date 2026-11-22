@@ -148,14 +148,19 @@ def _string_rotation(n_orb: int, n_elec: int, kparams: np.ndarray) -> np.ndarray
     return expm(-(generator - generator.T))
 
 
-def lucj_state(sector: Sector, layers: list[LucjParams]) -> np.ndarray:
+def lucj_state(sector: Sector, layers: list[LucjParams], *,
+               final_rotation: bool = True) -> np.ndarray:
     """LUCJ state in the sector basis of ``sector_states`` (alpha strings outer).
 
     Each layer is exp(K) exp(i J) exp(-K) applied to the Hartree-Fock state; the
     orbital rotations act on the alpha and beta strings separately (two small dense
     matrices on the state reshaped to alpha x beta) and the Jastrow phases are
-    diagonal in the occupation basis.
+    diagonal in the occupation basis. ``final_rotation=False`` stops before the last
+    layer's exp(K): the same state expressed in the orbitals rotated by exp(-K), whose
+    Hamiltonian is ``rotated_hamiltonian``.
     """
+    if not final_rotation and len(layers) != 1:
+        raise ValueError("Omitting the final rotation needs one LUCJ layer")
     n_orb = sector.n_orb
     alpha_count = math.comb(n_orb, sector.n_alpha)
     beta_count = math.comb(n_orb, sector.n_beta)
@@ -175,8 +180,33 @@ def lucj_state(sector: Sector, layers: list[LucjParams]) -> np.ndarray:
         for orbital in range(0, n_orb, 4):
             phases += layer.j_opp[orbital // 4] * occupied[:, orbital] * occupied[:, n_orb + orbital]
         state = state * np.exp(1j * phases).reshape(alpha_count, beta_count)
-        state = alpha.T @ state @ beta
+        if final_rotation:
+            state = alpha.T @ state @ beta
     return state.reshape(-1)
+
+
+def orbital_rotation(n_orb: int, kparams) -> np.ndarray:
+    """The one-electron matrix exp(-kappa) of the LUCJ rotation exp(-K), K from kparams."""
+    from scipy.linalg import expm
+
+    generator = np.zeros((n_orb, n_orb))
+    generator[np.triu_indices(n_orb, 1)] = np.asarray(kparams, dtype=float)
+    return expm(-(generator - generator.T))
+
+
+def rotated_integrals(h1: np.ndarray, h2: np.ndarray, kparams
+                      ) -> tuple[np.ndarray, np.ndarray]:
+    """Integrals of F H F^dagger, F = exp(-K): the Hamiltonian that samples of an LUCJ
+    circuit without its final rotation (``final_rotation=False``) diagonalize.
+
+    With U = exp(-kappa), h' = U h U^T and the same on every index of the chemist-order
+    two-electron integrals; the energies are unchanged (a unitary change of orbitals).
+    """
+    rotation = orbital_rotation(len(h1), kparams).T
+    h1 = rotation.T @ h1 @ rotation
+    h2 = np.einsum("pqrs,pi,qj,rk,sl->ijkl", h2, rotation, rotation, rotation, rotation,
+                   optimize=True)
+    return h1, h2
 
 
 def lucj_state_reference(sector: Sector, layers: list[LucjParams]) -> np.ndarray:

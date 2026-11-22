@@ -7,5 +7,14 @@
     "min_shots": 1,
     "max_shots": 50000,
     "source": "hybrid-pulse-chemistry report/job_ledger.csv: 3,773 completed MQ02 jobs 2026-09-25..2026-10-08, all exactly 5.00 + 0.005×shots; failed jobs charged 0"
+  },
+  "QZ03": {
+    "currency": "CNY",
+    "per_task": 5.0,
+    "per_shot": 0.005,
+    "max_billing_multiplier": 1.0,
+    "min_shots": 1,
+    "max_shots": 50000,
+    "source": "Forecast at the MQ02 ledger tariff (an upper bound): on 2026-11-22 all 60 MQ02 and QZ03 jobs were charged 2.50 + 0.0025 x shots CNY; the platform's charge per job is recorded"
   }
 }

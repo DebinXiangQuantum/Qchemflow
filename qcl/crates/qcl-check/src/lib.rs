@@ -357,8 +357,9 @@ pub fn check(graph: &Graph) -> Vec<Diagnostic> {
                     })
                     && !matches!(device.site.as_deref(), Some(site) if site != "local")
                     && device.billing.as_deref().unwrap_or("none") == "none";
+                // lqcloud backends with a circuit sampling path (qcl/_impls/quantum.py).
                 let supported_cloud = device.provider.as_deref() == Some("lqcloud")
-                    && device.backend.as_deref() == Some("MQ02")
+                    && matches!(device.backend.as_deref(), Some("MQ02" | "QZ03"))
                     && device.billing.as_deref() == Some("metered")
                     && device.site.as_deref() == Some("remote");
                 if !supported_simulator && !supported_cloud {
@@ -366,7 +367,7 @@ pub fn check(graph: &Graph) -> Vec<Diagnostic> {
                         code: "QCL-E203",
                         source: node.source.clone(),
                         message: format!("sample has no implementation for {}", device.id),
-                        hint: "Use a statevector simulator or metered lqcloud MQ02".into(),
+                        hint: "Use a statevector simulator or metered lqcloud MQ02 or QZ03".into(),
                     });
                 }
                 let required_qubits = node.inputs.first().and_then(|id| kernel_qubits(graph, *id));

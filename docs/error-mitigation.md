@@ -1,7 +1,18 @@
 # Error mitigation for QCL quantum workloads: design
 
-Status: proposal (2026-11-22). Nothing here runs on a QPU yet. Phase 0 needs no QPU time;
-Phase 1 needs an approved QPU budget.
+Status (2026-11-22):
+- **Implemented:**
+  - `kernels.lucj(..., final_rotation=False)`, with SQD rotating the integrals;
+  - `Device.with_options(dd="cpmg" | "cp")`;
+  - QZ03 sampling with chain layouts on its grid;
+  - offline readout inversion, post-selection and uniform-noise baselines in
+    `qcl/apps/hardware_analysis.py`.
+- **Phase 1 has run on MQ02 and QZ03** (60 jobs, 1,650 CNY). Results are in
+  `docs/hardware-runs.md`:
+  - omitting the final rotation is the one change that recovers signal at 12 qubits
+    (in-sector signal from about 0 to 1.6–5.3 %);
+  - post-selection is the largest offline gain;
+  - the platform's automatic DD found almost no idle windows long enough to act.
 
 ## 1. What the MQ02 data says
 

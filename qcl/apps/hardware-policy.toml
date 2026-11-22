@@ -1,0 +1,10 @@
+# Operator policy for qcl/apps/hardware_applications.py (lqcloud MQ02 and QZ03).
+# Shot limits count hardware and simulator shots (the ideal reference samples are
+# 10^6 shots per circuit variant); the cost cap is per plan, in CNY.
+[budget]
+qpu_shots = 30000000
+wall_time = "8h"
+
+[cloud_qpu]
+qpu_cost = 3000
+currency = "CNY"

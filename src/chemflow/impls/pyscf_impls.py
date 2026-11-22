@@ -175,9 +175,15 @@ def _from_scf(mf: scf.hf.SCF, model: ElectronicModel, store: ArtifactStore,
     eri = ao2mo.restore(1, cas.get_h2eff(), n_orb)
     space = OrbitalSpace(coefficients_ref=store.put(mo_coeff),
                          n_orb=n_orb, n_elec=n_elec, frozen_orbitals=n_frozen)
-    ledger = ConstantLedger().add("nuclear_repulsion", Q(mol.energy_nuc(), "hartree"))
+    # The mean field's nuclear term: for an embedded (QM/MM) mean field it includes the
+    # nuclei's interaction with the point charges; otherwise it is mol.energy_nuc().
+    nuclear = float(mf.energy_nuc())
+    ledger = ConstantLedger().add("nuclear_repulsion", Q(nuclear, "hartree"))
     if n_frozen:
-        ledger = ledger.add("frozen_core", Q(ecore - mol.energy_nuc(), "hartree"))
+        ledger = ledger.add("frozen_core", Q(ecore - nuclear, "hartree"))
+    environment = getattr(mf, "chemflow_environment_energy", None)
+    if environment is not None:
+        ledger = ledger.add("mm_environment", Q(float(environment), "hartree"))
     hamiltonian = Hamiltonian(h1_ref=store.put(np.asarray(h1)),
                               h2_ref=store.put(np.asarray(eri)), space=content_hash(space),
                               n_orb=n_orb, ledger=ledger)

@@ -51,7 +51,7 @@ class Device:
 
     def with_options(self, **options: Any) -> Device:
         allowed = {"cpu": {"threads", "slots"}, "gpu": {"precision", "memory_limit_gb", "slots"},
-                   "qpu": {"transpile", "mitigate", "max_shots", "slots"}}[self.kind]
+                   "qpu": {"transpile", "mitigate", "max_shots", "slots", "dd"}}[self.kind]
         invalid = set(options) - allowed
         if invalid:
             raise CompileError([{"code": "QCL-E202", "source": _source(),
@@ -75,6 +75,7 @@ class Device:
             or "slots" in options and (
                 type(options["slots"]) is not int or options["slots"] < 1)
             or "mitigate" in options and options["mitigate"] not in ("none", "readout")
+            or "dd" in options and options["dd"] not in ("none", "cpmg", "cp")
         )
         if value_error:
             raise CompileError([{"code": "QCL-E202", "source": _source(),
@@ -1945,6 +1946,7 @@ def _active(namespace: str) -> GraphBuilder:
 QMMM_NONBONDED = ("NoCutoff", "CutoffNonPeriodic", "CutoffPeriodic", "PME", "Ewald", "LJPME")
 QMMM_SOLVERS = ("fci", "gpu_fci", "sqd")
 _DOMAIN_IMPLEMENTATIONS = {
+    "qmmm.scf": "qmmm.scf/chemflow-openmm-pyscf",
     "dmrg.solve": "dmrg.solve/block2", "vqe.statevector": "vqe.statevector/chemflow-sector",
     "vqe.adapt": "vqe.adapt/chemflow-sector", "eom.ip": "eom.ip/pyscf-eom-ccsd",
     "eom.ea": "eom.ea/pyscf-eom-ccsd", "neb": "neb/ase-climbing-image",
@@ -1982,28 +1984,8 @@ class _QMMM:
         """
         source = _source()
         graph = _active("qmmm")
-        if not isinstance(pdb, str) or "\n" not in pdb:
-            raise _compile_error(source, "QM/MM needs PDB text", "Pass the PDB file contents")
-        try:
-            positions = [[float(value) for value in row] for row in positions_nm]
-        except (TypeError, ValueError) as error:
-            raise _compile_error(source, "QM/MM positions must be [x, y, z] rows in nm",
-                                 "Pass a snapshot of every atom") from error
-        if (not positions or any(len(row) != 3 or not all(math.isfinite(value) for value in row)
-                                 for row in positions)):
-            raise _compile_error(source, "QM/MM positions must be finite [x, y, z] rows in nm",
-                                 "Pass a snapshot of every atom")
-        region = list(qm_atoms) if isinstance(qm_atoms, (list, tuple)) else None
-        if (not region or len(set(region)) != len(region) or
-                any(type(index) is not int or not 0 <= index < len(positions)
-                    for index in region)):
-            raise _compile_error(source, "QM region must list unique atom indices",
-                                 "Select the QM molecules by atom index")
-        if (not isinstance(forcefields, (list, tuple)) or not forcefields or
-                not all(isinstance(name, str) and name for name in forcefields) or
-                nonbonded not in QMMM_NONBONDED):
-            raise _compile_error(source, "Invalid OpenMM force fields or nonbonded method",
-                                 "Use OpenMM force-field files and " + ", ".join(QMMM_NONBONDED))
+        positions, region = _qmmm_inputs(source, pdb, positions_nm, qm_atoms, forcefields,
+                                         nonbonded)
         if method not in ("rhf", "casci"):
             raise _compile_error(source, f"Unknown QM/MM method {method!r}", "Use rhf or casci",
                                  "QCL-E104")
@@ -2040,6 +2022,77 @@ class _QMMM:
         family = ("RHF" if method == "rhf" else
                   {"fci": "CASCI", "gpu_fci": "CASCI(GPU FCI)", "sqd": "CASCI(SQD)"}[solver])
         return _Value(graph, node, "estimate", unit="hartree", family=f"QM/MM-{family}")
+
+    @staticmethod
+    def scf(pdb: str, positions_nm: Any, qm_atoms: Any, *,
+            forcefields: tuple[str, ...] = ("amber14/tip3p.xml",), nonbonded: str = "NoCutoff",
+            basis: str = "sto-3g", charge: int = 0, spin: int = 0) -> _Value:
+        """Electrostatically embedded RHF of the QM region, as an SCF result.
+
+        ``qcl.active_space`` of it gives the QM region's active-space Hamiltonian in the
+        field of the MM point charges, with the residual MM energy in its constant, so
+        every active-space solver and quantum kernel returns QM/MM total energies. Its
+        ``.energy`` is the QM/MM-RHF total.
+        """
+        source = _source()
+        graph = _active("qmmm")
+        positions, region = _qmmm_inputs(source, pdb, positions_nm, qm_atoms, forcefields,
+                                         nonbonded)
+        if (not isinstance(basis, str) or not basis.strip() or type(charge) is not int or
+                type(spin) is not int or spin < 0):
+            raise _compile_error(source, "Invalid QM basis, charge or spin",
+                                 "Use a basis name and integer charge and 2S")
+        symbols = _pdb_elements(pdb)
+        if len(symbols) != len(positions):
+            raise _compile_error(source, "PDB atoms and positions differ in number",
+                                 "Pass one position per PDB atom")
+        atoms = "; ".join(f"{symbols[index]} " + " ".join(f"{10 * value:.10f}"
+                                                          for value in positions[index])
+                          for index in sorted(region))
+        params = {"pdb": pdb, "positions_nm": positions, "qm_atoms": region,
+                  "forcefields": list(forcefields), "nonbonded": nonbonded, "basis": basis,
+                  "charge": charge, "spin": spin}
+        node = graph.add_node("qmmm.scf", [], json.dumps(params, sort_keys=True), source)
+        return _Value(graph, node, "scf_result", Molecule(atoms, basis, charge, spin),
+                      family="QM/MM-RHF")
+
+
+def _qmmm_inputs(source: str, pdb: Any, positions_nm: Any, qm_atoms: Any, forcefields: Any,
+                 nonbonded: Any) -> tuple[list[list[float]], list[int]]:
+    """Validated snapshot positions (nm) and QM region of a QM/MM call."""
+    if not isinstance(pdb, str) or "\n" not in pdb:
+        raise _compile_error(source, "QM/MM needs PDB text", "Pass the PDB file contents")
+    try:
+        positions = [[float(value) for value in row] for row in positions_nm]
+    except (TypeError, ValueError) as error:
+        raise _compile_error(source, "QM/MM positions must be [x, y, z] rows in nm",
+                             "Pass a snapshot of every atom") from error
+    if (not positions or any(len(row) != 3 or not all(math.isfinite(value) for value in row)
+                             for row in positions)):
+        raise _compile_error(source, "QM/MM positions must be finite [x, y, z] rows in nm",
+                             "Pass a snapshot of every atom")
+    region = list(qm_atoms) if isinstance(qm_atoms, (list, tuple)) else None
+    if (not region or len(set(region)) != len(region) or
+            any(type(index) is not int or not 0 <= index < len(positions)
+                for index in region)):
+        raise _compile_error(source, "QM region must list unique atom indices",
+                             "Select the QM molecules by atom index")
+    if (not isinstance(forcefields, (list, tuple)) or not forcefields or
+            not all(isinstance(name, str) and name for name in forcefields) or
+            nonbonded not in QMMM_NONBONDED):
+        raise _compile_error(source, "Invalid OpenMM force fields or nonbonded method",
+                             "Use OpenMM force-field files and " + ", ".join(QMMM_NONBONDED))
+    return positions, region
+
+
+def _pdb_elements(pdb: str) -> list[str]:
+    """Element symbols of the ATOM/HETATM records, in file order."""
+    symbols = []
+    for line in pdb.splitlines():
+        if line.startswith(("ATOM  ", "HETATM")):
+            element = line[76:78].strip() or line[12:16].strip().lstrip("0123456789")[:1]
+            symbols.append(element.capitalize())
+    return symbols
 
 
 qmmm = _QMMM()
@@ -2860,7 +2913,18 @@ class _Kernels:
         return _Value(active.graph, active.graph.hf_kernel(active.node_id, _source()),
                       "kernel", active.molecule, active.node_id)
 
-    def lucj(self, active: _Value, *, params: _Value | list[float] | None = None) -> _Value:
+    def lucj(self, active: _Value, *, params: _Value | list[float] | None = None,
+             final_rotation: bool = True) -> _Value:
+        """CCSD-seeded (or given) one-layer LUCJ kernel on an active space.
+
+        ``final_rotation=False`` omits the closing orbital rotation, about half the
+        two-qubit gates: the samples are then in the rotated orbital basis, and
+        ``sqd.diagonalize`` rotates the Hamiltonian to match (an exact change of basis).
+        """
+        if type(final_rotation) is not bool:
+            raise CompileError([{"code": "QCL-E104", "source": _source(),
+                                 "message": "final_rotation must be a boolean",
+                                 "hint": "Pass final_rotation=True or False"}])
         if not isinstance(active, _Value) or active.kind != "active_space":
             raise CompileError([{"code": "QCL-E101", "source": _source(),
                                  "message": "LUCJ kernel requires an active space",
@@ -2889,9 +2953,16 @@ class _Kernels:
                                      "message": "LUCJ parameter shape is invalid",
                                      "hint": f"Pass {size} finite parameters"}])
             vector = [float(value) for value in params]
-        node = graph.lucj_kernel(active.node_id, params_node,
-                                 json.dumps(vector) if vector is not None else None,
-                                 _source())
+        if final_rotation:
+            node = graph.lucj_kernel(active.node_id, params_node,
+                                     json.dumps(vector) if vector is not None else None,
+                                     _source())
+        else:
+            node = graph.add_node("kernel.lucj",
+                                  [active.node_id] + ([params_node] if params_node is not None
+                                                      else []),
+                                  json.dumps({"params": vector, "final_rotation": False}),
+                                  _source())
         return _Value(graph, node, "kernel", active.molecule, active.node_id)
 
 
@@ -3861,7 +3932,7 @@ class Plan:
                 return ("sample/chemflow-cupy-statevector"
                         if device["simulator_host"].startswith("gpu") else
                         "sample/chemflow-statevector")
-            return "sample/chemflow-lqcloud-mq02"
+            return f"sample/chemflow-lqcloud-{(device['backend'] or 'mq02').lower()}"
 
         def gradient_implementation(node: dict[str, Any]) -> str:
             method = ("fd-" if node["params"]["step"] is not None else "")
@@ -4126,16 +4197,16 @@ class Plan:
             device = node["device"]
             if device["simulator_host"] is not None:
                 continue
-            if device["provider"] == "lqcloud" and device["backend"] == "MQ02":
+            if device["provider"] == "lqcloud" and device["backend"] in ("MQ02", "QZ03"):
                 from chemflow.backends.lqcloud import LqcloudBackend, load_pricing
 
                 count, per_job_shots = jobs_and_shots(node)
-                prediction = LqcloudBackend(backend="MQ02").prediction(
+                prediction = LqcloudBackend(backend=device["backend"]).prediction(
                     per_job_shots)
                 if qpu_seconds is not None:
                     qpu_seconds += count * prediction["qpu_s"]
                 if device["billing"] == "metered":
-                    pricing = load_pricing("MQ02")
+                    pricing = load_pricing(device["backend"])
                     currency = pricing.currency
                     tariff_source = pricing.source
                     if qpu_cost is not None:

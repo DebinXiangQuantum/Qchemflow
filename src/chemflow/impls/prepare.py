@@ -13,9 +13,14 @@ from chemflow.types import CircuitSpec, StatePrep
 
 def prepare_sector_state(data: Any, sector: dict, store: Any, ansatz: str = "hf",
                          init: str = "zero", params: list[float] | None = None,
-                         seed: int = 0, *, materialize: bool = True) -> StatePrep:
+                         seed: int = 0, *, materialize: bool = True,
+                         final_rotation: bool = True) -> StatePrep:
+    """State (and hardware circuit) for ``ansatz``; ``final_rotation=False`` (LUCJ only)
+    prepares it in the rotated orbital basis, see ``chemflow.impls.lucj``."""
     if ansatz not in ("hf", "uccsd", "lucj") or init not in ("zero", "ccsd", "random"):
         raise ValueError("Unsupported ansatz or initialization")
+    if not final_rotation and ansatz != "lucj":
+        raise ValueError("Only LUCJ can omit its final orbital rotation")
     if (sector["n_alpha"], sector["n_beta"], sector["n_orb"]) != (
             data.sector.n_alpha, data.sector.n_beta, data.sector.n_orb):
         raise ValueError("Sector differs from Hamiltonian")
@@ -45,10 +50,13 @@ def prepare_sector_state(data: Any, sector: dict, store: Any, ansatz: str = "hf"
             values = LucjParams.random(data.sector.n_orb, np.random.default_rng(seed))
         if params is not None:
             values = LucjParams.from_vector(np.asarray(params), data.sector.n_orb)
-        state = lucj_state(data.sector, [values]) if materialize else None
+        state = (lucj_state(data.sector, [values], final_rotation=final_rotation)
+                 if materialize else None)
         circuit = CircuitSpec(ansatz="lucj", n_orb=data.sector.n_orb,
                               n_alpha=data.sector.n_alpha, n_beta=data.sector.n_beta,
-                              layers=(tuple(float(item) for item in values.to_vector()),))
+                              layers=(tuple(float(item) for item in values.to_vector()),),
+                              final_rotation=final_rotation)
+    recipe = f"{ansatz}:{init}:{content_hash(params)}" + ("" if final_rotation else ":open")
     return StatePrep(state_ref=store.put(state) if materialize else "", encoding_id="sector_state",
                      hamiltonian_id=data.hamiltonian.id, sector=data.sector,
-                     recipe=f"{ansatz}:{init}:{content_hash(params)}", circuit=circuit)
+                     recipe=recipe, circuit=circuit)

@@ -88,6 +88,9 @@ class CircuitSpec(BaseModel, frozen=True):
     n_qubits: int | None = None
     n_clbits: int = 0
     gates: tuple[dict[str, Any], ...] = ()
+    # LUCJ only: False omits the last layer's closing orbital rotation, so the circuit
+    # measures in the rotated orbital basis (see chemflow.impls.lucj.rotated_hamiltonian).
+    final_rotation: bool = True
 
 
 class StatePrep(BaseModel, frozen=True):
