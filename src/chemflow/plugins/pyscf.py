@@ -27,7 +27,8 @@ class SQDSolver(fci.selected_ci.SelectedCI):
 
     def __init__(self, sampler="statevector", shots=4096, seed=0, ansatz="lucj",
                  init="ccsd", n_batches=10, max_iter=5, spin=None, backend=None,
-                 calibration=None, budget=None, resample=None, purpose="screen"):
+                 calibration=None, budget=None, resample=None, purpose="screen",
+                 extend=False):
         super().__init__()
         if sampler not in ("statevector", "aer_noisy", "gpu", "lqcloud"):
             raise ValueError("Unknown sampler")
@@ -42,6 +43,10 @@ class SQDSolver(fci.selected_ci.SelectedCI):
             raise ValueError("shots, n_batches and max_iter must be positive integers")
         if ansatz not in ("hf", "lucj") or init not in ("zero", "ccsd", "random"):
             raise ValueError("Unsupported ansatz or initialization")
+        if type(extend) is not bool:
+            raise ValueError("extend must be a boolean")
+        # extend adds the single excitations of the leading configurations (classical).
+        self.extend = extend
         self.resample = resample or ("once" if sampler == "lqcloud" else "always")
         if self.resample not in ("once", "always"):
             raise ValueError("resample must be 'once' or 'always'")
@@ -208,7 +213,7 @@ class SQDSolver(fci.selected_ci.SelectedCI):
             self._record_cost(result.cost)
         energy, diagnostics, vector = sqd_sector(
             data, sector, store, self._samples, seed=self.seed, n_batches=self.n_batches,
-            max_iter=self.max_iter, with_ext=False, energy_tol=self.conv_tol,
+            max_iter=self.max_iter, with_ext=self.extend, energy_tol=self.conv_tol,
             total_spin=None if self.spin is None else abs(self.spin) / 2,
             return_wavefunction=True, wavefunction_format="selected_ci")
         energy += ecore

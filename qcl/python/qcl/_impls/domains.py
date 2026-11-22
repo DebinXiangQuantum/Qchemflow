@@ -37,7 +37,7 @@ def _op_qmmm_energy(ctx, node, identifier, operation, inputs):
     options = None
     if solver == "sqd":
         options = {key: params[key] for key in ("sampler", "shots", "seed", "n_batches",
-                                                "max_iter")}
+                                                "max_iter", "extend") if key in params}
     computed = _on_device(device, lambda: qmmm_energy(
         ctx.store, system, params["positions_nm"], params["qm_atoms"], params["basis"],
         method=params["method"], cas=cas, solver=solver, solver_options=options,
@@ -64,7 +64,8 @@ def _op_qmmm_energy(ctx, node, identifier, operation, inputs):
             "qm_solver": {key: value for key, value in
                           diagnostics.get("provenance", {}).get("qm_solver", {}).items()
                           if key in ("relation", "device", "resources", "converged",
-                                     "subspace_dimension", "s2")},
+                                     "subspace_dimension", "n_determinants", "shots",
+                                     "sampler", "s2")},
             "validity_flags": ["Electrostatic embedding; no link atoms or QM forces",
                                "Exact only within the stated QM/MM model"],
         },

@@ -1966,7 +1966,8 @@ class _QMMM:
                nonbonded: str = "NoCutoff", basis: str = "sto-3g", method: str = "rhf",
                cas: tuple[int, int] | None = None, charge: int = 0, spin: int = 0,
                solver: str = "fci", sampler: str = "statevector", shots: int = 4096,
-               seed: int = 0, n_batches: int = 10, max_iter: int = 5) -> _Value:
+               seed: int = 0, n_batches: int = 10, max_iter: int = 5,
+               extend: bool = False) -> _Value:
         """Total QM/MM energy (hartree) of one snapshot.
 
         ``pdb`` is PDB text, ``positions_nm`` the snapshot coordinates in nm and
@@ -1975,7 +1976,9 @@ class _QMMM:
         space with ``solver``: ``"fci"`` (CPU) or ``"gpu_fci"`` (GPU), both equivalent
         within the QM/MM-CASCI model, or ``"sqd"`` (LUCJ samples from ``sampler``:
         ``"statevector"`` or ``"aer_noisy"`` on a CPU, ``"gpu"`` on a GPU), a variational
-        upper bound. Place GPU solvers and samplers on a GPU.
+        upper bound. Place GPU solvers and samplers on a GPU. ``extend=True`` adds the
+        single excitations of the leading sampled configurations to the SQD subspace
+        (classical post-processing, as in ``sqd.diagonalize``); it stays an upper bound.
         """
         source = _source()
         graph = _active("qmmm")
@@ -2019,7 +2022,7 @@ class _QMMM:
                 sampler not in QMMM_SAMPLERS or
                 any(type(value) is not int or value < 1 for value in (shots, n_batches,
                                                                       max_iter)) or
-                type(seed) is not int or seed < 0):
+                type(seed) is not int or seed < 0 or type(extend) is not bool):
             raise _compile_error(source, "Invalid QM/MM SQD sampling options",
                                  "Use sampler " + ", ".join(QMMM_SAMPLERS) +
                                  " with positive shots, n_batches and max_iter")
@@ -2031,6 +2034,8 @@ class _QMMM:
         if solver == "sqd":
             params.update(sampler=sampler, shots=shots, seed=seed, n_batches=n_batches,
                           max_iter=max_iter)
+            if extend:
+                params["extend"] = True
         node = graph.add_node("qmmm.energy", [], json.dumps(params, sort_keys=True), source)
         family = ("RHF" if method == "rhf" else
                   {"fci": "CASCI", "gpu_fci": "CASCI(GPU FCI)", "sqd": "CASCI(SQD)"}[solver])

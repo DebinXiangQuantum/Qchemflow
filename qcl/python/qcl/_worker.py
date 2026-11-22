@@ -328,7 +328,23 @@ def _run_lanes(nodes: list[dict[str, Any]],
         "lane": {str(node["id"]): _lane(node) for node in nodes}, "slots": {}}, {})
 
 
+def _result_stream():
+    """The worker's original stdout, kept for the result; file descriptor 1 becomes stderr.
+
+    The parent parses stdout as the result JSON. Libraries print to descriptor 1 at the
+    C level (block2, for one), which no Python-level redirect catches, so the result
+    gets a private copy of the descriptor and everything else goes to stderr.
+    """
+    import os
+
+    sys.stdout.flush()
+    result = os.fdopen(os.dup(1), "w", encoding="utf-8")
+    os.dup2(2, 1)
+    return result
+
+
 def main() -> None:
+    result_stream = _result_stream()
     from chemflow.backends.cuda_libs import (
         import_gpu4pyscf_single_device,
         prefer_wheel_cuda_libraries,
@@ -377,7 +393,8 @@ def main() -> None:
         soft = ceiling if hard == resource.RLIM_INFINITY else min(ceiling, hard)
         resource.setrlimit(resource.RLIMIT_CPU,
                            (soft, hard))
-    json.dump(execute(request), sys.stdout)
+    json.dump(execute(request), result_stream)
+    result_stream.close()
 
 
 if __name__ == "__main__":

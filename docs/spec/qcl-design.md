@@ -356,7 +356,7 @@ Domain operations (implemented; CPU):
 
 | Operation | Result | Relation |
 |---|---|---|
-| `qcl.qmmm.energy(pdb, positions_nm, qm_atoms, forcefields=, nonbonded=, basis=, method="rhf" \| "casci", cas=, solver="fci" \| "gpu_fci" \| "sqd", sampler="statevector" \| "aer_noisy" \| "gpu")` | electrostatic QM/MM total energy (OpenMM system, PySCF QM region); GPU FCI and GPU-sampled SQD are placed on a GPU (`QCL-E203` otherwise) | RHF and SQD: variational upper bound; CASCI by (GPU) FCI: equivalent within the QM/MM-CASCI model |
+| `qcl.qmmm.energy(pdb, positions_nm, qm_atoms, forcefields=, nonbonded=, basis=, method="rhf" \| "casci", cas=, solver="fci" \| "gpu_fci" \| "sqd", sampler="statevector" \| "aer_noisy" \| "gpu", extend=False)` | electrostatic QM/MM total energy (OpenMM system, PySCF QM region); GPU FCI and GPU-sampled SQD are placed on a GPU (`QCL-E203` otherwise); `extend=True` adds the single excitations of the leading sampled configurations to the SQD subspace | RHF and SQD: variational upper bound; CASCI by (GPU) FCI: equivalent within the QM/MM-CASCI model |
 | `qcl.embedding.ewf(H, sector, bath="full" \| "dmet" \| "bno", solver="fci" \| "ccsd")` | embedded wave-function energy over atomic (IAO) fragments of a full-space RHF molecule | full bath with FCI fragments: equivalent; otherwise approximate |
 | `qcl.drug.descriptors(ligands)`, `qcl.drug.filter(ligands, rules=)` | RDKit descriptors; Lipinski, PAINS and Brenk alerts (a `Record`) | none: a screen, not an estimate |
 | `qcl.synthesis.routes(target, stock=, iterations=, time_limit_s=)` | AiZynthFinder 4.4.1 routes in its isolated environment (a `Record`) | none |

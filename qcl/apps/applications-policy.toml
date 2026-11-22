@@ -1,0 +1,6 @@
+# Operator policy for the application programs (hydrogen_chain.py, diels_alder.py).
+# Their samples come from GPU-hosted statevector simulators; the budget still
+# bounds every sample node, so pointing a program at a cloud QPU cannot exceed it.
+[budget]
+qpu_shots = 4000000
+wall_time = "8h"

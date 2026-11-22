@@ -48,6 +48,13 @@ integrals. `apps/open_shell.py` demonstrates UKS spin-resolved orbital
 projections; `apps/h2_mp2.py` and `apps/h2_sci.py` demonstrate correlated
 methods. `apps/h2_gfn2.py`, `apps/h2_gfn2_optimize.py`, and
 `apps/h2_gfn2_solvation.py` exercise the CPU tblite engine.
+Three application-scale programs combine CPU, GPU and sampled-circuit lanes:
+`apps/t4l_quantum_binding.py` (T4 lysozyme L99A with benzene: MM/GBSA, pocket
+MP2 fragments, docking and QM/MM SQD up to 28 qubits),
+`apps/hydrogen_chain.py` (H12 equation of state against FCI, CCSD(T), DMRG and
+EWF) and `apps/diels_alder.py` (Sella/IRC transition state, CCSD(T) barrier and
+28-qubit SQD). Results and timings are in `docs/application-runs.md`;
+`docs/error-mitigation.md` designs mitigation for hardware runs.
 PCM/RHF runs on CPU or GPU; GPU PCM does not accept a precomputed ERI override.
 `apps/h2_pcm.py` chooses the first available GPU or a CPU and computes
 `E(PCM) - E(gas)`; the CPU path reuses integrals.

@@ -395,13 +395,21 @@ def test_qmmm_sqd_is_a_bound_on_the_casci_energy():
         options = {"method": "casci", "cas": (4, 4)}
         return {"fci": qcl.qmmm.energy(pdb, positions, [0, 1, 2], **options).to(cpu),
                 "sqd": qcl.qmmm.energy(pdb, positions, [0, 1, 2], solver="sqd", shots=2000,
-                                       seed=3, **options).to(cpu)}
+                                       seed=3, **options).to(cpu),
+                "extended": qcl.qmmm.energy(pdb, positions, [0, 1, 2], solver="sqd",
+                                            shots=2000, seed=3, extend=True,
+                                            **options).to(cpu)}
 
     plan = water.compile(_cpu())
-    assert plan.relations() == {"fci": "equivalent", "sqd": "variational_upper_bound"}
+    assert plan.relations() == {"fci": "equivalent", "sqd": "variational_upper_bound",
+                                "extended": "variational_upper_bound"}
     energies = plan.run()
-    # SQD from 2000 LUCJ samples is a bound within a few mHa of the CASCI energy.
-    assert energies["fci"].value - 1e-9 <= energies["sqd"].value < energies["fci"].value + 5e-3
+    # SQD from 2000 LUCJ samples is a bound within a few mHa of the CASCI energy; the
+    # single-excitation extension enlarges the subspace, so it is a tighter bound.
+    fci, sqd, extended = (energies[key].value for key in ("fci", "sqd", "extended"))
+    assert fci - 1e-9 <= extended <= sqd + 1e-9 and sqd < fci + 5e-3
+    solver = energies["extended"].provenance["qm_solver"]
+    assert solver["n_determinants"] >= energies["sqd"].provenance["qm_solver"]["n_determinants"]
     assert energies["sqd"].provenance["method"]["family"] == "QM/MM-CASCI[4, 4]/SQD(statevector)"
 
 
