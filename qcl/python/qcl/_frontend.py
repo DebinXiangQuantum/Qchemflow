@@ -51,7 +51,8 @@ class Device:
 
     def with_options(self, **options: Any) -> Device:
         allowed = {"cpu": {"threads", "slots"}, "gpu": {"precision", "memory_limit_gb", "slots"},
-                   "qpu": {"transpile", "mitigate", "max_shots", "slots", "dd"}}[self.kind]
+                   "qpu": {"transpile", "mitigate", "max_shots", "slots", "dd",
+                           "compile"}}[self.kind]
         invalid = set(options) - allowed
         if invalid:
             raise CompileError([{"code": "QCL-E202", "source": _source(),
@@ -76,6 +77,7 @@ class Device:
                 type(options["slots"]) is not int or options["slots"] < 1)
             or "mitigate" in options and options["mitigate"] not in ("none", "readout")
             or "dd" in options and options["dd"] not in ("none", "cpmg", "cp")
+            or "compile" in options and options["compile"] not in ("search", "plain")
         )
         if value_error:
             raise CompileError([{"code": "QCL-E202", "source": _source(),

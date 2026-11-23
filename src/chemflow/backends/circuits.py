@@ -128,15 +128,55 @@ def build_circuit(spec: CircuitSpec) -> QuantumCircuit:
     return circuit
 
 
-def compile_native(circuit: QuantumCircuit) -> QuantumCircuit:
+# Identifies the compiled circuit a QPU job ran (part of the lqcloud job identity).
+COMPILER_VERSION = "chain-layout-search-v2"
+# compile_native(search=False): identity placement, one seed (the compiler before v2).
+PLAIN_COMPILER = "chain-identity-seed91"
+TRANSPILER_SEEDS = (91, 1, 2, 3, 4)
+
+
+def chain_layouts(count: int) -> list[list[int]]:
+    """Initial placements of ``count`` logical qubits on a linear chain to try.
+
+    Identity, and for a two-spin register (alpha qubits 0..n-1, beta n..2n-1) the folded
+    order: alpha orbitals run down the first half of the chain and beta orbitals up the
+    second, so alpha_0 and beta_0 are neighbours and an orbital rotation's Givens network
+    stays within each half.
+    """
+    layouts = [list(range(count))]
+    if count >= 4 and count % 2 == 0:
+        half = count // 2
+        layouts.append([half - 1 - index for index in range(half)] +
+                       [half + index for index in range(half)])
+    return layouts
+
+
+def compile_native(circuit: QuantumCircuit, *, search: bool = True) -> QuantumCircuit:
+    """Transpile to rz/sx/x/cz on a linear chain, measuring every qubit.
+
+    With ``search`` (the default) it tries each placement of ``chain_layouts`` with every
+    seed of ``TRANSPILER_SEEDS`` and keeps the circuit with the fewest CZ gates, then the
+    least depth. Measurements stay on the logical qubits, so the bit order of the results
+    does not depend on the placement.
+    """
     native = circuit.copy()
     native.barrier()
     native.measure_all()
     count = native.num_qubits
     edges = [[index, index + 1] for index in range(count - 1)]
     edges += [[right, left] for left, right in edges]
-    return transpile(native, basis_gates=["rz", "sx", "x", "cz"], coupling_map=edges,
-                    initial_layout=list(range(count)), optimization_level=3, seed_transpiler=91)
+    layouts = chain_layouts(count) if search else [list(range(count))]
+    seeds = TRANSPILER_SEEDS if search else TRANSPILER_SEEDS[:1]
+    best = None
+    for layout in layouts:
+        for seed in seeds:
+            candidate = transpile(native, basis_gates=["rz", "sx", "x", "cz"],
+                                  coupling_map=edges, initial_layout=layout,
+                                  optimization_level=3, seed_transpiler=seed)
+            key = (candidate.count_ops().get("cz", 0), candidate.depth())
+            if best is None or key < best[0]:
+                best = (key, candidate)
+    return best[1]
 
 
 def memory_to_index(memory: str, *, q0_left: bool) -> int:

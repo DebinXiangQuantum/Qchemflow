@@ -107,7 +107,10 @@ def main():
             electrons, n_orb = spec["active"]
             store = ArtifactStore()
             data = _rebuild(group, name, spec, store)
-            bits = payload["rows"][name]["base_bits"]
+            row_bits = payload["rows"][name]
+            bits = row_bits.get("base_bits") or next(
+                value for key, value in row_bits.items()
+                if key.endswith("_bits") and not key.startswith("ideal_"))
             jobs = [job_timing(ledger[job]) for job in bits["job_ids"] if job in ledger]
             row = {"group": group, "system": name, "qubits": 2 * n_orb,
                    "sector": comb(n_orb, electrons // 2) ** 2, "qpu_jobs": jobs,

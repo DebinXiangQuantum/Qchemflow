@@ -1,7 +1,9 @@
 """Paths the hardware experiments need: open-rotation LUCJ, embedded QM/MM active spaces,
 grid layouts and dynamical decoupling, each against an independent reference."""
 
+import sys
 from itertools import pairwise
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -18,6 +20,8 @@ from chemflow.impls.sector import SectorEngine
 from chemflow.runtime.artifacts import ArtifactStore
 from chemflow.types import CircuitSpec, Sector, StatePrep
 from chemflow.types.model import ActiveSpaceSpec, ElectronicModel
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "qcl" / "apps"))
 
 LIH = "Li 0 0 0; H 0 0 1.6"
 
@@ -63,6 +67,36 @@ def test_dropping_the_final_rotation_cuts_two_qubit_gates():
         return compile_native(build_circuit(spec)).count_ops().get("cz", 0)
 
     assert cz(False) < 0.7 * cz(True)
+
+
+def test_layout_search_shortens_lucj_and_keeps_the_logical_bit_order():
+    from hardware_analysis import sparse_hellinger
+    from qiskit.quantum_info import Statevector
+    from qiskit_aer import AerSimulator
+
+    params = LucjParams.random(4, np.random.default_rng(2), scale=0.3).to_vector()
+    spec = CircuitSpec(ansatz="lucj", n_orb=4, n_alpha=2, n_beta=2,
+                       layers=(tuple(params),), final_rotation=False)
+    circuit = build_circuit(spec)
+    searched = compile_native(circuit)
+    plain = compile_native(circuit, search=False)
+    assert searched.count_ops()["cz"] < plain.count_ops()["cz"]
+    ideal = Statevector.from_instruction(circuit).probabilities_dict()
+    exact = {str(int(bits, 2)): probability for bits, probability in ideal.items()
+             if probability > 1e-12}
+    counts = AerSimulator().run(searched, shots=40000, seed_simulator=3).result().get_counts()
+    measured = {str(int(bits.replace(" ", ""), 2)): count for bits, count in counts.items()}
+    assert sparse_hellinger(measured, exact) > 0.995
+
+
+def test_a_new_compiler_is_a_new_job(tmp_path, monkeypatch):
+    from chemflow.backends import lqcloud
+
+    backend = LqcloudBackend(state_dir=tmp_path)
+    before = backend.record_path(_prep(), 100)
+    assert backend.record_path(_prep(), 100, compiler="chain-identity-seed91") != before
+    monkeypatch.setattr(lqcloud, "COMPILER_VERSION", "another")
+    assert backend.record_path(_prep(), 100) != before
 
 
 def test_sqd_of_open_lucj_samples_reaches_casci(tmp_path, monkeypatch):
@@ -178,5 +212,8 @@ def test_decoupling_and_open_rotation_are_distinct_jobs(tmp_path):
 def test_qpu_devices_accept_only_known_decoupling_modes():
     qpu = qcl.Device("mq02", "qpu", qubits=24, provider="lqcloud", backend="MQ02")
     assert qpu.with_options(dd="cpmg").options["dd"] == "cpmg"
+    assert qpu.with_options(compile="plain").options["compile"] == "plain"
     with pytest.raises(qcl.CompileError):
         qpu.with_options(dd="xy8")
+    with pytest.raises(qcl.CompileError):
+        qpu.with_options(compile="fast")

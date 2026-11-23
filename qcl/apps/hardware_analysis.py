@@ -252,7 +252,9 @@ def analyse_group(payload: dict, ledger: dict, calibration: dict, metadata: dict
         if name in metadata:
             store = ArtifactStore()
             data = _rebuild(payload["group"], name, metadata[name], store)
-            shots = sum(part["shots"] for part in row["base_bits"]["parts"])
+            first = next(key for key in row if key.endswith("_bits") and
+                         not key.startswith("ideal_"))
+            shots = sum(part["shots"] for part in row[first]["parts"])
             entry["uniform_raw_error_meh"] = MEH * (uniform_control(
                 data, store, shots, extend=False)[0] - casci)
             if n_qubits <= 12:

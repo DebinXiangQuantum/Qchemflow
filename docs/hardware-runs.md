@@ -182,7 +182,60 @@ such samples would cost about as much as the exact FCI.
   that stops at about 12 qubits (91 CZ, s ≈ 5 %). These are estimates from the
   measured scaling, not measurements.
 
-## 4. Reproduction
+## 4. Optimized compilation on hardware (2026-11-23)
+
+The 2026-11-22 runs used two circuits:
+- `base`: the old compile, kept as the control;
+- `open` and `open_dd`: final rotation omitted, but identity qubit placement.
+
+The planned compile adds a placement search, now in `compile_native`:
+- it tries the identity and the folded α/β order (α₀ next to β₀ on the chain) with five
+  transpiler seeds, and keeps the fewest CZ;
+- `COMPILER_VERSION` enters the QPU job identity, so jobs compiled differently are never
+  reused;
+- `Device.with_options(compile="plain")` reproduces the old compile.
+
+CZ counts on a linear chain, compile statistics for the N₂/cc-pVDZ LUCJ circuits at
+1.098 Å. The IBM columns use ffsim with Qiskit, optimization level 3, from the comparison
+in the 2026-11-23 deck. The application circuits that ran have the same counts at their
+sizes; 16 and 20 qubits did not run.
+
+| qubits | old compile: `base` / `open` | optimized `open` | IBM toolchain | IBM, final rotation dropped | ran on hardware |
+|---|---|---|---|---|---|
+| 8 | 40 / 35 | 26 | 54 | 54 | MQ02 |
+| 12 | 174 / 91 | 88 | 150 | 150 | MQ02 |
+| 16 | 254 / 143 | 128 | 158 | 158 | — |
+| 20 | 508 / 258 | 256 | 360 | 336 | — |
+| 24 | 690 / 360 | 342 | 402 | 346 | MQ02 |
+| 28 | 1020 / 510 | 508 | — | — | QZ03 |
+
+The optimized circuits ran on 2026-11-23: all groups with the `open` variant (fresh
+readout calibration). A same-session A/B of old against optimized compile followed on the
+Diels–Alder circuits (8192 shots × 2 repeats each, same device chains). Together they were
+43 jobs, charged 1,125 CNY.
+
+Same-session A/B:
+
+| system | qubits | CZ old → optimized | signal s | F |
+|---|---|---|---|---|
+| ethylene | 4 | 9 → 6 | 0.687 → 0.688 | 0.757 → 0.766 |
+| butadiene | 8 | 35 → 26 | **0.487 → 0.540** (repeats ± 0.003) | 0.553 → 0.584 |
+| DA transition state | 12 | 91 → 88 | 0.045 → 0.030 (repeats ± 0.01) | 0.074 → 0.069 |
+| cyclohexene | 12 | 91 → 88 | 0.056 → 0.053 | 0.065 → 0.065 |
+
+- **The placement search pays where it removes many gates.** At 8 qubits it removes a
+  quarter of the CZ, and the signal rises by 11 % relative. At 12 qubits it removes three
+  CZ, and the change is within the repeat spread.
+- **Day-to-day drift is larger than the compile gain.** The same 8-qubit circuit had
+  s = 0.34 on 11-22 and 0.49 on 11-23. Across days the 12-qubit signals move by factors of
+  2–4: T4L bound 0.052 → 0.011, separated 0.016 → 0.047. Compilation and mitigation
+  comparisons are therefore only meaningful within one session.
+- **At 24 and 28 qubits the optimized circuits (342 and 508 CZ) are still
+  indistinguishable from noise.**
+- **Against IBM's toolchain** the optimized circuits use 0.48–0.81× its CZ at 8–20
+  qubits, and 0.99× (24 qubits) of IBM's no-final-rotation circuits.
+
+## 5. Reproduction
 
 ```sh
 . ~/.config/chemflow/lqcloud.env              # QPU credential
@@ -191,6 +244,10 @@ QCL_POLICY_FILE=qcl/apps/hardware-policy.toml CUDA_VISIBLE_DEVICES=2,3 \
     --da da/result.json --t4l t4l-hw           # --qpu sim: free rehearsal on simulators
 python qcl/apps/hardware_applications.py analyse --out hw
 cd qcl/apps && python timing_comparison.py --out ../../hw
+# same-session compile A/B, then a variant-by-variant comparison
+python qcl/apps/hardware_applications.py run --out hw-ab --da da/result.json --t4l t4l-hw \
+    --groups diels_alder --variants open open_plain --shots 8192
+python qcl/apps/compare_hardware_runs.py hw-ab:open_plain hw-ab:open
 ```
 
 A rerun reuses the recorded jobs from the QPU ledger and pays nothing for them. Raw

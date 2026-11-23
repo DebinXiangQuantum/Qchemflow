@@ -160,6 +160,8 @@ def _op_sample(ctx, node, identifier, operation, inputs):
         decoupling = dynamic_decoupling((device.get("options") or {}).get("dd", "none"))
         if decoupling is not None:
             options["dynamic_decoupling"] = decoupling
+        if (device.get("options") or {}).get("compile", "search") == "plain":
+            options["compile_search"] = False
         if "repetition" in node["params"]:
             options["repetition"] = node["params"]["repetition"]
         computed = backend.sample(store, prep, shots, seed, **options)

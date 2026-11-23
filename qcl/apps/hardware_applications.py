@@ -43,7 +43,9 @@ import qcl
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 VARIANTS = {"base": (True, "none"), "open": (False, "none"), "dd": (True, "cpmg"),
-            "open_dd": (False, "cpmg")}
+            "open_dd": (False, "cpmg"), "open_plain": (False, "none")}
+# Variants compiled with the pre-v2 compiler (identity placement, one transpiler seed).
+PLAIN = {"open_plain"}
 GROUPS = ("readout", "diels_alder", "t4l", "hchain", "large")
 SPACINGS_BOHR = (1.8, 3.2)
 
@@ -85,14 +87,15 @@ def _t4l(args):
     return prepare(folder)
 
 
-def qpus(backend, qubits, dd, copies, simulate, gpu):
+def qpus(backend, qubits, dd, copies, simulate, gpu, compile_mode="search"):
     if simulate:
         return [qcl.Device(f"sim-{backend.lower()}-{dd}-{index}", "qpu", qubits=qubits,
                            simulator_host=gpu.id, simulator_method="statevector")
                 for index in range(copies)]
-    return [qcl.Device(f"{backend.lower()}-{dd}-{index}", "qpu", qubits=qubits,
+    return [qcl.Device(f"{backend.lower()}-{dd}-{compile_mode}-{index}", "qpu", qubits=qubits,
                        site="remote", billing="metered", provider="lqcloud",
-                       backend=backend).with_options(dd=dd) for index in range(copies)]
+                       backend=backend).with_options(dd=dd, compile=compile_mode)
+            for index in range(copies)]
 
 
 @qcl.workflow
@@ -132,7 +135,8 @@ def hardware(specs, cpu, gpus, *, shots, repeats, ideal_shots, simulate, seed=17
             kernel = qcl.kernels.lucj(space, params=amplitudes, final_rotation=final)
             count = 1 if large else repeats
             per_job = shots if not large else 20000
-            devices = qpus(backend, 35 if backend == "QZ03" else 24, dd, count, simulate, gpu)
+            devices = qpus(backend, 35 if backend == "QZ03" else 24, dd, count, simulate, gpu,
+                           "plain" if variant in PLAIN else "search")
             bits = qcl.sample(kernel, shots=[per_job] * count, seed=seed + index).to(
                 devices).to(cpu)
             row[f"{variant}_bits"] = bits
@@ -216,6 +220,9 @@ def run(args):
                                    shots=args.shots, simulate=args.qpu == "sim")
         else:
             specs = systems(group, args)
+            if args.variants:
+                specs = {name: (source, active, backend, tuple(args.variants))
+                         for name, (source, active, backend, _) in specs.items()}
             _write_metadata(out, group, specs)
             plan = hardware.compile(specs, cluster.cpus[0], cluster.gpus,
                                     shots=args.shots, repeats=args.repeats,
@@ -248,6 +255,8 @@ def main():
     runner.add_argument("--repeats", type=int, default=2)
     runner.add_argument("--ideal-shots", type=int, default=1000000)
     runner.add_argument("--timeout", type=float, default=6 * 3600)
+    runner.add_argument("--variants", nargs="+", choices=tuple(VARIANTS),
+                        help="run these mitigation variants for every system")
     runner.add_argument("--force", action="store_true")
     analyser = commands.add_parser("analyse")
     analyser.add_argument("--out", required=True)

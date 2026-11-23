@@ -13,7 +13,14 @@ from itertools import pairwise
 from pathlib import Path
 
 from chemflow.backends.calibration import best_layout
-from chemflow.backends.circuits import build_circuit, compile_native, memory_to_index, to_lqcloud
+from chemflow.backends.circuits import (
+    COMPILER_VERSION,
+    PLAIN_COMPILER,
+    build_circuit,
+    compile_native,
+    memory_to_index,
+    to_lqcloud,
+)
 from chemflow.diagnostics import AdapterError
 from chemflow.ids import content_hash
 from chemflow.runtime.result import ExecutionResult
@@ -129,11 +136,13 @@ class LqcloudBackend:
     parameter_tolerance = 1e-6
 
     def _structure(self, prep, shots: int, repetition: int,
-                   dynamic_decoupling: dict | None = None) -> str | None:
+                   dynamic_decoupling: dict | None = None,
+                   compiler: str | None = None) -> str | None:
         """Hash of everything that defines the submitted job except its angles.
 
-        Options added later (an open final rotation, dynamical decoupling) enter only when
-        set, so jobs recorded before them keep their identities.
+        It includes the compiler version: a job compiled differently ran a different
+        circuit and is not reused. Options added later (an open final rotation, dynamical
+        decoupling) enter only when set.
         """
         from chemflow.types import CircuitSpec
 
@@ -148,6 +157,7 @@ class LqcloudBackend:
                              "gates": list(circuit.gates),
                              "layer_sizes": [len(layer) for layer in circuit.layers],
                              "shots": shots, "repetition": repetition,
+                             "compiler": compiler or COMPILER_VERSION,
                              **({"final_rotation": False} if not circuit.final_rotation
                                 else {}),
                              **({"dynamic_decoupling": dynamic_decoupling}
@@ -163,14 +173,15 @@ class LqcloudBackend:
         return [float(value) for layer in circuit.layers for value in layer]
 
     def _matching_record(self, prep, shots: int, repetition: int,
-                         dynamic_decoupling: dict | None = None) -> Path | None:
+                         dynamic_decoupling: dict | None = None,
+                         compiler: str | None = None) -> Path | None:
         """A recorded job for the same circuit, angles equal within the tolerance.
 
         The angles come from SCF and CCSD, which are not bitwise reproducible
         across runs (GPU SCF accumulates with atomics), so an exact content hash
         alone would resubmit, and pay for, the same circuit on every rerun.
         """
-        structure = self._structure(prep, shots, repetition, dynamic_decoupling)
+        structure = self._structure(prep, shots, repetition, dynamic_decoupling, compiler)
         if structure is None or not self.state_dir.is_dir():
             return None
         angles = self._angles(prep)
@@ -188,16 +199,18 @@ class LqcloudBackend:
         return None
 
     def record_path(self, prep, shots: int, repetition: int = 0,
-                    dynamic_decoupling: dict | None = None) -> Path:
+                    dynamic_decoupling: dict | None = None,
+                    compiler: str | None = None) -> Path:
         key = content_hash({"backend": self.backend, "impl_id": self.identifier,
                             "prep": prep.model_dump(mode="json"), "shots": shots,
-                            "repetition": repetition,
+                            "repetition": repetition, "compiler": compiler or COMPILER_VERSION,
                             **({"dynamic_decoupling": dynamic_decoupling}
                                if dynamic_decoupling else {})})
         exact = self.state_dir / f"{key}.json"
         if exact.exists():
             return exact
-        return self._matching_record(prep, shots, repetition, dynamic_decoupling) or exact
+        return (self._matching_record(prep, shots, repetition, dynamic_decoupling, compiler)
+                or exact)
 
     def _archive(self, path: Path) -> None:
         archive = self.state_dir / "archive"
@@ -221,7 +234,8 @@ class LqcloudBackend:
         return record
 
     def sample(self, store, prep, shots: int, seed: int = 0, repetition: int = 0,
-               dynamic_decoupling: dict | None = None, **kwargs):
+               dynamic_decoupling: dict | None = None, compile_search: bool = True,
+               **kwargs):
         if prep.circuit is None:
             raise AdapterError("CF-E080", None, "State has no hardware circuit",
                                "Prepare HF or LUCJ", nothing_consumed=True)
@@ -229,7 +243,8 @@ class LqcloudBackend:
             raise AdapterError("CF-E080", None, "Shots outside supported range",
                                "Choose supported shots",
                                nothing_consumed=True)
-        path = self.record_path(prep, shots, repetition, dynamic_decoupling)
+        compiler = COMPILER_VERSION if compile_search else PLAIN_COMPILER
+        path = self.record_path(prep, shots, repetition, dynamic_decoupling, compiler)
         key = path.stem
         if path.exists():
             record = json.loads(path.read_text(encoding="utf-8"))
@@ -264,15 +279,17 @@ class LqcloudBackend:
                     raise AdapterError("CF-E080", None, "Live QPU price exceeds the QCL limit",
                                        "Review the current tariff and plan budget",
                                        nothing_consumed=True)
-            native = compile_native(build_circuit(prep.circuit))
+            logical = build_circuit(prep.circuit)
+            native = (compile_native(logical) if compile_search else
+                      compile_native(logical, search=False))
             layout = best_layout(config, native.num_qubits)
             program = to_lqcloud(native)
             record = {"key": key, "state": "prepared", "backend": self.backend,
                       "impl_id": self.identifier, "shots": shots, "layout": layout,
                       "structure": self._structure(prep, shots, repetition,
-                                                   dynamic_decoupling),
+                                                   dynamic_decoupling, compiler),
                       "parameters": self._angles(prep),
-                      "dynamic_decoupling": dynamic_decoupling,
+                      "dynamic_decoupling": dynamic_decoupling, "compiler": compiler,
                       **_circuit_size(native),
                       "circuit_hash": content_hash(str(native)),
                       "predicted_cost": self.prediction(shots),
@@ -377,7 +394,7 @@ class LqcloudBackend:
         device = f"lqcloud:{self.backend}"
         job_id = record["job_id"]
         diagnostics = {key: record[key] for key in (
-            "cost_source", "charge_above_prediction", "layout", "dynamic_decoupling",
+            "cost_source", "charge_above_prediction", "layout", "dynamic_decoupling", "compiler",
             "dd_applied", "dd_info", "native_ops", "depth") if key in record}
         diagnostics["backend"] = self.backend
         if record.get("cost") is not None:
