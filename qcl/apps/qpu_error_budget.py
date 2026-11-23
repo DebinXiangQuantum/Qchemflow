@@ -112,7 +112,8 @@ def native_circuit(run, point):
         parameters = (seed or LucjParams.zeros(orbitals)).to_vector().tolist()
     spec = CircuitSpec(ansatz="lucj", n_orb=orbitals, n_alpha=electrons // 2,
                        n_beta=electrons // 2, layers=[parameters])
-    return compile_native(build_circuit(spec))
+    # The circuits these runs used: general first rotation, identity placement, one seed.
+    return compile_native(build_circuit(spec, slater_prep=False), search=False)
 
 
 def schedule(native, one_qubit_ns, cz_ns):

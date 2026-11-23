@@ -2916,13 +2916,22 @@ class _Kernels:
                       "kernel", active.molecule, active.node_id)
 
     def lucj(self, active: _Value, *, params: _Value | list[float] | None = None,
-             final_rotation: bool = True) -> _Value:
+             final_rotation: bool = True, jastrow: str = "all") -> _Value:
         """CCSD-seeded (or given) one-layer LUCJ kernel on an active space.
 
         ``final_rotation=False`` omits the closing orbital rotation, about half the
         two-qubit gates: the samples are then in the rotated orbital basis, and
         ``sqd.diagonalize`` rotates the Hamiltonian to match (an exact change of basis).
+        Its samples are those of the Slater determinant U|HF>, whatever the Jastrow: the
+        diagonal phases do not change computational-basis probabilities, so such samples
+        are efficiently classical. ``jastrow="line"`` keeps only the opposite-spin pair that
+        is adjacent on a linear chain (orbital 0), dropping the long-range pairs and their
+        routing; an approximation of the LUCJ state.
         """
+        if jastrow not in ("all", "line"):
+            raise CompileError([{"code": "QCL-E104", "source": _source(),
+                                 "message": "jastrow must be 'all' or 'line'",
+                                 "hint": "Use jastrow='all' or jastrow='line'"}])
         if type(final_rotation) is not bool:
             raise CompileError([{"code": "QCL-E104", "source": _source(),
                                  "message": "final_rotation must be a boolean",
@@ -2955,7 +2964,7 @@ class _Kernels:
                                      "message": "LUCJ parameter shape is invalid",
                                      "hint": f"Pass {size} finite parameters"}])
             vector = [float(value) for value in params]
-        if final_rotation:
+        if final_rotation and jastrow == "all":
             node = graph.lucj_kernel(active.node_id, params_node,
                                      json.dumps(vector) if vector is not None else None,
                                      _source())
@@ -2963,7 +2972,10 @@ class _Kernels:
             node = graph.add_node("kernel.lucj",
                                   [active.node_id] + ([params_node] if params_node is not None
                                                       else []),
-                                  json.dumps({"params": vector, "final_rotation": False}),
+                                  json.dumps({"params": vector,
+                                              "final_rotation": final_rotation,
+                                              **({"jastrow": jastrow} if jastrow != "all"
+                                                 else {})}),
                                   _source())
         return _Value(graph, node, "kernel", active.molecule, active.node_id)
 

@@ -33,7 +33,52 @@ def _rotation(circuit: QuantumCircuit, matrix: np.ndarray, n_orb: int) -> Quantu
     return circuit
 
 
-def build_circuit(spec: CircuitSpec) -> QuantumCircuit:
+def slater_givens(occupied: np.ndarray) -> list[tuple[int, int, float, float]]:
+    """Adjacent-orbital Givens rotations (top, bottom, cos, sin) preparing a determinant.
+
+    ``occupied`` is the n x m matrix of the m occupied orbitals (columns). Applied in the
+    returned order to the reference determinant (orbitals 0..m-1 occupied), the rotations
+    prepare the determinant of ``occupied`` up to a global phase, with m(n - m) of them
+    instead of the n(n - 1)/2 a general orbital rotation needs.
+    """
+    V = np.asarray(occupied, dtype=float).T.copy()
+    m, n = V.shape
+    # Rotations among the occupied orbitals are free: give V a staircase shape.
+    for column in range(n - 1, n - m, -1):
+        for row in range(m - 1 - (n - 1 - column)):
+            first, second = V[row, column], V[row + 1, column]
+            length = np.hypot(first, second)
+            if length < 1e-14:
+                continue
+            cosine, sine = second / length, first / length
+            V[[row, row + 1]] = np.array([[cosine, -sine], [sine, cosine]]) @ V[[row, row + 1]]
+    steps = []
+    for row in range(m):
+        for column in range(n - m + row, row, -1):
+            first, second = V[row, column - 1], V[row, column]
+            length = np.hypot(first, second)
+            if length < 1e-14:
+                continue
+            cosine, sine = first / length, second / length
+            V[:, [column - 1, column]] = V[:, [column - 1, column]] @ np.array(
+                [[cosine, -sine], [sine, cosine]])
+            steps.append((column - 1, column, cosine, sine))
+    return list(reversed(steps))
+
+
+def _slater_preparation(circuit: QuantumCircuit, matrix: np.ndarray, n_orb: int,
+                        n_alpha: int, n_beta: int) -> None:
+    """Append exp(-K) applied to the HF reference (X gates already in place), per spin."""
+    for offset, count in ((0, n_alpha), (n_orb, n_beta)):
+        if count in (0, n_orb):
+            continue
+        for top, bottom, cosine, sine in slater_givens(matrix[:, :count]):
+            gate = np.eye(4)
+            gate[1:3, 1:3] = [[cosine, -sine], [sine, cosine]]
+            circuit.append(UnitaryGate(gate), [offset + top, offset + bottom])
+
+
+def build_circuit(spec: CircuitSpec, *, slater_prep: bool = True) -> QuantumCircuit:
     if spec.ansatz == "custom":
         if spec.n_qubits is None or spec.n_qubits < 1 or len(spec.layers) != 1:
             raise ValueError("Custom circuit requires qubit count and one parameter vector")
@@ -102,7 +147,7 @@ def build_circuit(spec: CircuitSpec) -> QuantumCircuit:
                     circuit.compose(rotation.inverse(), inplace=True)
     if not spec.final_rotation and (spec.ansatz != "lucj" or len(spec.layers) != 1):
         raise ValueError("Omitting the final rotation needs a one-layer LUCJ circuit")
-    for vector in spec.layers if spec.ansatz == "lucj" else ():
+    for index, vector in enumerate(spec.layers if spec.ansatz == "lucj" else ()):
         layer = LucjParams.from_vector(np.asarray(vector), n_orb)
         if len(vector) != layer.size:
             raise ValueError("Invalid LUCJ parameter vector")
@@ -112,7 +157,11 @@ def build_circuit(spec: CircuitSpec) -> QuantumCircuit:
             generator[right, left] = -angle
         forward = QuantumCircuit(2 * n_orb)
         _rotation(forward, expm(-generator), n_orb)
-        circuit.compose(forward, inplace=True)
+        if index == 0 and slater_prep:
+            # The first rotation acts on |HF>: prepare the rotated determinant directly.
+            _slater_preparation(circuit, expm(-generator), n_orb, spec.n_alpha, spec.n_beta)
+        else:
+            circuit.compose(forward, inplace=True)
         for orbital, angle in enumerate(layer.j_same):
             for offset in (0, n_orb):
                 circuit.cp(float(angle), offset + orbital, offset + orbital + 1)
@@ -129,10 +178,27 @@ def build_circuit(spec: CircuitSpec) -> QuantumCircuit:
 
 
 # Identifies the compiled circuit a QPU job ran (part of the lqcloud job identity).
-COMPILER_VERSION = "chain-layout-search-v2"
+COMPILER_VERSION = "chain-layout-search-v4-construction-search"
 # compile_native(search=False): identity placement, one seed (the compiler before v2).
-PLAIN_COMPILER = "chain-identity-seed91"
+PLAIN_COMPILER = "chain-identity-seed91-v4"
 TRANSPILER_SEEDS = (91, 1, 2, 3, 4)
+
+
+def compile_spec(spec: CircuitSpec, *, search: bool = True) -> QuantumCircuit:
+    """Native circuit for ``spec`` with the fewest CZ over the equivalent constructions.
+
+    An LUCJ circuit's first orbital rotation can be built as the optimal Slater-determinant
+    preparation (fewer Givens rotations from 12 qubits up) or as the general rotation
+    network (which transpiles shorter at 8 qubits); both prepare the same state. Each is
+    compiled with ``compile_native``.
+    """
+    candidates = [build_circuit(spec)]
+    if search and spec.ansatz == "lucj" and spec.layers:
+        candidates.append(build_circuit(spec, slater_prep=False))
+    compiled = [compile_native(circuit, search=search) for circuit in candidates]
+    if len(compiled) == 1:
+        return compiled[0]
+    return min(compiled, key=lambda native: (native.count_ops().get("cz", 0), native.depth()))
 
 
 def chain_layouts(count: int) -> list[list[int]]:

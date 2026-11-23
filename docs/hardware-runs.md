@@ -31,6 +31,9 @@ Hamiltonian's constant.
 
 ## 1. Mitigation variants
 
+> **Correction (2026-11-23).** The `open` circuit J·U|HF⟩ samples exactly the Slater determinant U|HF⟩: the diagonal Jastrow phases do not change computational-basis probabilities. Its samples are therefore efficiently classical, and the higher signal of the `open` rows below shows what a shorter, classically simulable circuit survives, not quantum progress. The comparison with IBM's toolchain in Section 4 also set this circuit against IBM's full U†JU circuit. Corrected figures: `docs/shallow-circuits.md`.
+
+
 | Variant | Change |
 |---|---|
 | `base` | the circuit used so far |
@@ -82,7 +85,7 @@ Means over two repeats:
 
 Findings:
 
-1. **Omitting the final rotation is the one change that recovers signal.**
+1. **Omitting the final rotation recovers signal, but of a classical distribution** (see the correction above).
    - At 12 qubits the `base` circuits (174 CZ) are indistinguishable from noise:
      s = −0.2 % to 0.3 %, and the in-sector fraction equals that of random bitstrings.
    - The `open` circuits (91 CZ) have s = 1.6–5.3 %.
@@ -232,8 +235,10 @@ Same-session A/B:
   comparisons are therefore only meaningful within one session.
 - **At 24 and 28 qubits the optimized circuits (342 and 508 CZ) are still
   indistinguishable from noise.**
-- **Against IBM's toolchain** the optimized circuits use 0.48–0.81× its CZ at 8–20
-  qubits, and 0.99× (24 qubits) of IBM's no-final-rotation circuits.
+- **Against IBM's toolchain:** the figures first given here (0.48–0.81× at 8–20 qubits,
+  0.99× at 24) compared the classical `open` circuit with IBM's full U†JU circuit. Like
+  for like, with the v4 compiler, our full LUCJ uses 0.48× IBM's CZ at 8 qubits, 0.99× at
+  12, and 1.29–1.61× at 16–24 (`docs/shallow-circuits.md`).
 
 ## 5. Reproduction
 

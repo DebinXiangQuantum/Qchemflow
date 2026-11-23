@@ -63,7 +63,7 @@ def exact_times(data, store, n_orb):
 
 
 def quantum_classical_times(data, store, counts, shots, n_orb, large):
-    from chemflow.backends.circuits import build_circuit, compile_native
+    from chemflow.backends.circuits import compile_spec
     from chemflow.impls.lucj import LucjParams, ccsd_seed_from_integrals
     from chemflow.impls.sqd import sqd_sector
     from chemflow.types import CircuitSpec, Samples
@@ -72,7 +72,7 @@ def quantum_classical_times(data, store, counts, shots, n_orb, large):
     params = (seed or LucjParams.zeros(n_orb)).to_vector().tolist()
     spec = CircuitSpec(ansatz="lucj", n_orb=n_orb, n_alpha=data.sector.n_alpha,
                        n_beta=data.sector.n_beta, layers=(tuple(params),))
-    native, compile_s = _time(lambda: compile_native(build_circuit(spec)))
+    native, compile_s = _time(lambda: compile_spec(spec))
     samples = Samples(counts=counts, shots=shots, encoding_id="sector_state",
                       basis="computational", source="qpu", seed=0)
     options = {"n_batches": 4, "max_iter": 2} if large else {}

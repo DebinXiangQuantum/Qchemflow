@@ -16,7 +16,7 @@ from chemflow.types import CircuitSpec, StatePrep
 def sampled_vqe(store, hamiltonian, sector, ansatz="uccsd", optimizer="cobyla",
                 max_evaluations=60, shots_per_group=1024, seed=0, sampler=None,
                 bound_sampler="ideal", backend=None, **kwargs):
-    from chemflow.backends.circuits import build_circuit, compile_native
+    from chemflow.backends.circuits import build_circuit, compile_spec
 
     if sampler is not None and sampler != bound_sampler:
         raise ValueError("Sampler conflicts with binding")
@@ -96,7 +96,7 @@ def sampled_vqe(store, hamiltonian, sector, ansatz="uccsd", optimizer="cobyla",
                 measured = {format(int(key), f"0{2*selected.n_orb}b"): value
                             for key, value in output.value.counts.items()}
             elif bound_sampler == "aer_mq02":
-                measured = simulator.run(compile_native(build_circuit(spec)),
+                measured = simulator.run(compile_spec(spec),
                     shots=shots_per_group, seed_simulator=sample_seed).result().get_counts()
             else:
                 from qiskit.quantum_info import Statevector

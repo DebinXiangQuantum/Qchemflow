@@ -9,8 +9,11 @@ Status (2026-11-22):
     `qcl/apps/hardware_analysis.py`.
 - **Phase 1 has run on MQ02 and QZ03** (60 jobs, 1,650 CNY). Results are in
   `docs/hardware-runs.md`:
-  - omitting the final rotation is the one change that recovers signal at 12 qubits
-    (in-sector signal from about 0 to 1.6–5.3 %);
+  - omitting the final rotation recovers signal at 12 qubits (in-sector signal from
+    about 0 to 1.6–5.3 %), but its samples are those of a Slater determinant, so they are
+    classical (correction of 2026-11-23, `docs/shallow-circuits.md`);
+  - the Jastrow-off twin plus post-selection is the best whole-distribution correction
+    (12 qubits: F 0.078 → 0.21), but the correlated off-HF part stays at the noise level;
   - post-selection is the largest offline gain;
   - the platform's automatic DD found almost no idle windows long enough to act.
 

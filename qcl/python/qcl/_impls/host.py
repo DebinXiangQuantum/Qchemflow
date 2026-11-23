@@ -138,6 +138,14 @@ def _op_kernel_hf(ctx, node, identifier, operation, inputs):
 def _op_kernel_lucj(ctx, node, identifier, operation, inputs):
     values = ctx.values
     vector = inputs[1]["vector"] if len(inputs) == 2 else node["params"]["params"]
+    if node["params"].get("jastrow") == "line" and vector is not None:
+        import numpy as np
+
+        from chemflow.impls.lucj import LucjParams
+
+        layer = LucjParams.from_vector(np.asarray(vector), inputs[0]["data"].sector.n_orb)
+        layer.j_opp[1:] = 0.0   # keep only the chain-adjacent opposite-spin pair
+        vector = layer.to_vector().tolist()
     values[identifier] = {**inputs[0], "ansatz": "lucj", "params": vector,
                           "final_rotation": node["params"].get("final_rotation", True)}
 

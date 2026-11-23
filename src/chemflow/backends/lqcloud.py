@@ -76,6 +76,18 @@ def _predict_time(resources: dict, shots: int, dimension: str) -> float:
     return fitted * anchor[dimension] / anchor_fit
 
 
+def _compile(spec, search: bool):
+    """The cheapest native circuit over equivalent constructions (circuits.compile_spec)."""
+    candidates = [build_circuit(spec)]
+    if search and getattr(spec, "ansatz", None) == "lucj" and spec.layers:
+        candidates.append(build_circuit(spec, slater_prep=False))
+    compiled = [compile_native(circuit) if search else compile_native(circuit, search=False)
+                for circuit in candidates]
+    if len(compiled) == 1:
+        return compiled[0]
+    return min(compiled, key=lambda native: (native.count_ops().get("cz", 0), native.depth()))
+
+
 def _circuit_size(native) -> dict:
     """Native gate counts and depth of a transpiled circuit, for the job record."""
     if not hasattr(native, "count_ops"):
@@ -279,9 +291,7 @@ class LqcloudBackend:
                     raise AdapterError("CF-E080", None, "Live QPU price exceeds the QCL limit",
                                        "Review the current tariff and plan budget",
                                        nothing_consumed=True)
-            logical = build_circuit(prep.circuit)
-            native = (compile_native(logical) if compile_search else
-                      compile_native(logical, search=False))
+            native = _compile(prep.circuit, compile_search)
             layout = best_layout(config, native.num_qubits)
             program = to_lqcloud(native)
             record = {"key": key, "state": "prepared", "backend": self.backend,

@@ -11,7 +11,7 @@ import pytest
 qcl = pytest.importorskip("qcl")
 
 from chemflow.backends.calibration import best_layout
-from chemflow.backends.circuits import build_circuit, compile_native
+from chemflow.backends.circuits import PLAIN_COMPILER, build_circuit, compile_native
 from chemflow.backends.lqcloud import LqcloudBackend, dynamic_decoupling
 from chemflow.impls.fci import sector_states
 from chemflow.impls.lucj import LucjParams, lucj_state, rotated_integrals
@@ -94,7 +94,7 @@ def test_a_new_compiler_is_a_new_job(tmp_path, monkeypatch):
 
     backend = LqcloudBackend(state_dir=tmp_path)
     before = backend.record_path(_prep(), 100)
-    assert backend.record_path(_prep(), 100, compiler="chain-identity-seed91") != before
+    assert backend.record_path(_prep(), 100, compiler=PLAIN_COMPILER) != before
     monkeypatch.setattr(lqcloud, "COMPILER_VERSION", "another")
     assert backend.record_path(_prep(), 100) != before
 
@@ -217,3 +217,60 @@ def test_qpu_devices_accept_only_known_decoupling_modes():
         qpu.with_options(dd="xy8")
     with pytest.raises(qcl.CompileError):
         qpu.with_options(compile="fast")
+
+
+@pytest.mark.parametrize("n_orb,n_alpha,n_beta", [(4, 2, 2), (5, 3, 2), (6, 3, 3)])
+def test_lucj_circuits_prepare_the_rotated_determinant_with_fewer_givens(n_orb, n_alpha, n_beta):
+    from qiskit.quantum_info import Statevector
+
+    from chemflow.backends.circuits import slater_givens
+    from chemflow.impls.lucj import orbital_rotation
+
+    params = LucjParams.random(n_orb, np.random.default_rng(n_orb + n_alpha), scale=0.5)
+    sector = Sector(n_alpha=n_alpha, n_beta=n_beta, n_orb=n_orb)
+    states = sector_states(sector)
+    for final in (True, False):
+        spec = CircuitSpec(ansatz="lucj", n_orb=n_orb, n_alpha=n_alpha, n_beta=n_beta,
+                           layers=(tuple(params.to_vector()),), final_rotation=final)
+        amplitudes = Statevector.from_instruction(build_circuit(spec)).data[states]
+        expected = lucj_state(sector, [params], final_rotation=final)
+        assert abs(np.vdot(expected, amplitudes)) == pytest.approx(1, abs=1e-10)
+    occupied = orbital_rotation(n_orb, params.kparams)[:, :n_alpha]
+    assert len(slater_givens(occupied)) == n_alpha * (n_orb - n_alpha)
+
+
+def test_construction_search_keeps_the_cheaper_equivalent_circuit():
+    from chemflow.backends.circuits import compile_spec
+
+    params = LucjParams.random(4, np.random.default_rng(5), scale=0.3).to_vector()
+    spec = CircuitSpec(ansatz="lucj", n_orb=4, n_alpha=2, n_beta=2, layers=(tuple(params),))
+    counts = [compile_native(build_circuit(spec, slater_prep=flag)).count_ops().get("cz", 0)
+              for flag in (True, False)]
+    assert compile_spec(spec).count_ops().get("cz", 0) == min(counts)
+
+
+def test_line_native_jastrow_keeps_only_the_adjacent_pair(tmp_path, monkeypatch):
+    policy = tmp_path / "policy.toml"
+    policy.write_text("[budget]\nqpu_shots = 10000\n")
+    monkeypatch.setenv("QCL_POLICY_FILE", str(policy))
+
+    @qcl.workflow
+    def energies(cpu, qpu):
+        space = qcl.active_space(qcl.scf.hf(qcl.Molecule(LIH, "sto-3g")).to(cpu),
+                                 qcl.Active(4, 5)).to(cpu)
+        amplitudes = qcl.ccsd.amplitudes(space).to(cpu)
+        bits = qcl.sample(qcl.kernels.lucj(space, params=amplitudes, jastrow="line"),
+                          shots=4000, seed=5).to(qpu).to(cpu)
+        return {"casci": qcl.fci.solve(space.hamiltonian, space.sector).to(cpu).energy,
+                "sqd": qcl.sqd.diagonalize(space.hamiltonian, bits, space.sector).to(cpu)}
+
+    result = energies.compile(_cpu(), _simulator()).run()
+    assert result["sqd"].value == pytest.approx(result["casci"].value, abs=1e-6)
+    with pytest.raises(qcl.CompileError, match="jastrow"):
+        @qcl.workflow
+        def wrong(cpu):
+            space = qcl.active_space(qcl.scf.hf(qcl.Molecule(LIH, "sto-3g")).to(cpu),
+                                     qcl.Active(2, 2)).to(cpu)
+            return qcl.kernels.lucj(space, jastrow="none")
+
+        wrong.compile(_cpu())

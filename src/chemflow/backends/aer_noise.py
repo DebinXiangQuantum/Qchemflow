@@ -4,7 +4,7 @@ from qiskit_aer import AerSimulator
 from qiskit_aer.noise import NoiseModel, ReadoutError, depolarizing_error, thermal_relaxation_error
 
 from chemflow.backends.calibration import best_layout
-from chemflow.backends.circuits import build_circuit, compile_native, memory_to_index
+from chemflow.backends.circuits import compile_spec, memory_to_index
 from chemflow.diagnostics import AdapterError
 from chemflow.runtime.result import ExecutionResult
 from chemflow.types import Samples
@@ -51,7 +51,7 @@ def noisy_aer_sampler(calibration: dict):
         if prep.circuit is None:
             raise AdapterError("CF-E080", None, "State has no hardware circuit",
                                "Prepare HF or LUCJ")
-        native = compile_native(build_circuit(prep.circuit))
+        native = compile_spec(prep.circuit)
         layout = best_layout(calibration, native.num_qubits)
         simulator = AerSimulator(noise_model=noise_model(calibration, layout))
         counts = simulator.run(native, shots=shots, seed_simulator=seed).result().get_counts()
