@@ -81,11 +81,19 @@ def _compile(spec, search: bool):
     candidates = [build_circuit(spec)]
     if search and getattr(spec, "ansatz", None) == "lucj" and spec.layers:
         candidates.append(build_circuit(spec, slater_prep=False))
-    compiled = [compile_native(circuit) if search else compile_native(circuit, search=False)
+    level = getattr(spec, "optimization_level", 3)
+    compiled = [(compile_native(circuit) if level == 3 else
+                 compile_native(circuit, optimization_level=level)) if search else
+                compile_native(circuit, search=False, optimization_level=level)
                 for circuit in candidates]
-    if len(compiled) == 1:
-        return compiled[0]
-    return min(compiled, key=lambda native: (native.count_ops().get("cz", 0), native.depth()))
+    best = compiled[0] if len(compiled) == 1 else min(
+        compiled, key=lambda native: (native.count_ops().get("cz", 0), native.depth()))
+    seed = getattr(spec, "twirl_seed", None)
+    if seed is None:
+        return best
+    from chemflow.backends.circuits import twirl
+
+    return twirl(best, seed)
 
 
 def _circuit_size(native) -> dict:
@@ -172,6 +180,10 @@ class LqcloudBackend:
                              "compiler": compiler or COMPILER_VERSION,
                              **({"final_rotation": False} if not circuit.final_rotation
                                 else {}),
+                             **({"optimization_level": circuit.optimization_level}
+                                if circuit.optimization_level != 3 else {}),
+                             **({"twirl_seed": circuit.twirl_seed}
+                                if circuit.twirl_seed is not None else {}),
                              **({"dynamic_decoupling": dynamic_decoupling}
                                 if dynamic_decoupling else {})})
 

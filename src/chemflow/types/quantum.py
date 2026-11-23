@@ -79,7 +79,7 @@ class QubitOperator(BaseModel, frozen=True):
 
 
 class CircuitSpec(BaseModel, frozen=True):
-    ansatz: Literal["hf", "lucj", "uccsd", "custom"]
+    ansatz: Literal["hf", "lucj", "uccsd", "custom", "xxz_trotter"]
     n_orb: int
     n_alpha: int
     n_beta: int
@@ -91,6 +91,12 @@ class CircuitSpec(BaseModel, frozen=True):
     # LUCJ only: False omits the last layer's closing orbital rotation, so the circuit
     # measures in the rotated orbital basis (see chemflow.impls.lucj.rotated_hamiltonian).
     final_rotation: bool = True
+    # Transpiler optimization level for hardware compilation. Below 3 the two-qubit
+    # blocks are not resynthesized, so circuits that differ only in angles keep the same
+    # gates (needed when one circuit calibrates the noise of another).
+    optimization_level: int = 3
+    # Pauli twirling of every CZ (randomized compiling): the seed picks the random frame.
+    twirl_seed: int | None = None
 
 
 class StatePrep(BaseModel, frozen=True):

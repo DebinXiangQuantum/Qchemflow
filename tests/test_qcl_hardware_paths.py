@@ -274,3 +274,59 @@ def test_line_native_jastrow_keeps_only_the_adjacent_pair(tmp_path, monkeypatch)
             return qcl.kernels.lucj(space, jastrow="none")
 
         wrong.compile(_cpu())
+
+
+def test_xxz_bond_is_the_exact_two_qubit_exponential():
+    from qiskit import QuantumCircuit
+    from qiskit.quantum_info import Operator
+    from scipy.linalg import expm
+
+    from chemflow.backends.circuits import xxz_bond
+
+    pauli_x, pauli_y, pauli_z = (np.array([[0, 1], [1, 0]]), np.array([[0, -1j], [1j, 0]]),
+                                 np.diag([1, -1]))
+    for a, b, c in ((0.3, 0.3, 0.0), (-0.25, -0.25, -0.25), (0.1, -0.4, 0.7)):
+        circuit = QuantumCircuit(2)
+        xxz_bond(circuit, 0, 1, a, b, c)
+        target = expm(1j * (a * np.kron(pauli_x, pauli_x) + b * np.kron(pauli_y, pauli_y) +
+                            c * np.kron(pauli_z, pauli_z)))
+        overlap = abs(np.vdot(target.ravel(), Operator(circuit).data.ravel())) / 4
+        assert overlap == pytest.approx(1, abs=1e-12)
+
+
+def test_xxz_trotter_twins_compile_to_the_same_gates_and_twirling_is_exact():
+    from qiskit.quantum_info import Statevector
+    from scipy.linalg import expm
+
+    from chemflow.backends.circuits import compile_spec
+
+    def spec(coupling, anisotropy, steps, seed=None):
+        return CircuitSpec(ansatz="xxz_trotter", n_orb=6, n_alpha=3, n_beta=0, n_qubits=6,
+                           layers=((coupling, anisotropy, 0.05, steps),), optimization_level=1,
+                           twirl_seed=seed)
+
+    natives = [compile_spec(spec(coupling, anisotropy, 2))
+               for coupling, anisotropy in ((1.0, 1.0), (1.0, 0.0), (0.6, 0.0))]
+    assert len({native.count_ops()["cz"] for native in natives}) == 1
+    assert natives[0].count_ops()["cz"] == 3 * 5 * 2
+    # many small steps approach exp(-i t H) from the Neel state
+    fine = Statevector.from_instruction(build_circuit(spec(1.0, 1.0, 20))).data
+    hamiltonian = np.zeros((64, 64), dtype=complex)
+    pauli = {"X": np.array([[0, 1], [1, 0]]), "Y": np.array([[0, -1j], [1j, 0]]),
+             "Z": np.diag([1, -1])}
+    for site in range(5):
+        for label in "XYZ":
+            term = np.array([[1.0]])
+            for qubit in reversed(range(6)):
+                term = np.kron(term, pauli[label] if qubit in (site, site + 1) else np.eye(2))
+            hamiltonian += term
+    neel = np.zeros(64)
+    neel[sum(1 << qubit for qubit in range(0, 6, 2))] = 1
+    evolved = expm(-1j * 1.0 * hamiltonian) @ neel
+    assert abs(np.vdot(evolved, fine)) ** 2 > 0.99
+    plain, twirled = compile_spec(spec(1.0, 1.0, 2)), compile_spec(spec(1.0, 1.0, 2, seed=3))
+    assert twirled.count_ops()["cz"] == plain.count_ops()["cz"]
+    from qiskit.quantum_info import Operator
+
+    assert Operator(plain.remove_final_measurements(inplace=False)).equiv(
+        Operator(twirled.remove_final_measurements(inplace=False)))

@@ -142,3 +142,6 @@ recovers the known Hartree–Fock weight, not the correlation.
      600–1300-CZ circuits a few hundred native gates.
 
    Both need demonstrated hardware fidelity before any claim.
+
+Follow-up: `docs/dynamics-mitigation.md` tests Krylov sampling (no better for SQD) and
+interacting spin-chain dynamics on MQ02 with free-fermion-twin training and Pauli twirling.

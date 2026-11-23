@@ -78,7 +78,39 @@ def _slater_preparation(circuit: QuantumCircuit, matrix: np.ndarray, n_orb: int,
             circuit.append(UnitaryGate(gate), [offset + top, offset + bottom])
 
 
+def xxz_bond(circuit: QuantumCircuit, first: int, second: int, a: float, b: float,
+             c: float) -> None:
+    """exp(i(a XX + b YY + c ZZ)) on two qubits with three CNOTs (Vatan-Williams).
+
+    The same gates for every (a, b, c), so an XX (free-fermion) circuit and an XXZ
+    (interacting) one differ only in rotation angles.
+    """
+    circuit.rz(np.pi / 2, second)
+    circuit.cx(second, first)
+    circuit.rz(np.pi / 2 - 2 * c, first)
+    circuit.ry(np.pi / 2 - 2 * a, second)
+    circuit.cx(first, second)
+    circuit.ry(2 * b - np.pi / 2, second)
+    circuit.cx(second, first)
+    circuit.rz(-np.pi / 2, first)
+
+
 def build_circuit(spec: CircuitSpec, *, slater_prep: bool = True) -> QuantumCircuit:
+    if spec.ansatz == "xxz_trotter":
+        # layers = ((J, Delta, dt, steps),): Trotterized exp(-i t H) of the open XXZ chain
+        # H = sum J (XX + YY) + Delta ZZ, brick-wall order, from the Neel state |1010...>.
+        if spec.n_qubits is None or spec.n_qubits < 2 or len(spec.layers) != 1:
+            raise ValueError("XXZ Trotter circuits need n_qubits >= 2 and one parameter set")
+        coupling, anisotropy, step, steps = spec.layers[0]
+        circuit = QuantumCircuit(spec.n_qubits)
+        for qubit in range(0, spec.n_qubits, 2):
+            circuit.x(qubit)
+        for _ in range(int(steps)):
+            for parity in (0, 1):
+                for qubit in range(parity, spec.n_qubits - 1, 2):
+                    xxz_bond(circuit, qubit, qubit + 1, -coupling * step, -coupling * step,
+                             -anisotropy * step)
+        return circuit
     if spec.ansatz == "custom":
         if spec.n_qubits is None or spec.n_qubits < 1 or len(spec.layers) != 1:
             raise ValueError("Custom circuit requires qubit count and one parameter vector")
@@ -184,6 +216,18 @@ PLAIN_COMPILER = "chain-identity-seed91-v4"
 TRANSPILER_SEEDS = (91, 1, 2, 3, 4)
 
 
+def twirl(native: QuantumCircuit, seed: int) -> QuantumCircuit:
+    """Random Pauli frame around every CZ, merged into single-qubit gates (same CZ count)."""
+    from qiskit.circuit import pauli_twirl_2q_gates
+
+    count = native.num_qubits
+    edges = [[index, index + 1] for index in range(count - 1)]
+    edges += [[right, left] for left, right in edges]
+    twirled = pauli_twirl_2q_gates(native, twirling_gate="cz", seed=seed)
+    return transpile(twirled, basis_gates=["rz", "sx", "x", "cz"], coupling_map=edges,
+                     initial_layout=list(range(count)), optimization_level=1, seed_transpiler=0)
+
+
 def compile_spec(spec: CircuitSpec, *, search: bool = True) -> QuantumCircuit:
     """Native circuit for ``spec`` with the fewest CZ over the equivalent constructions.
 
@@ -195,10 +239,12 @@ def compile_spec(spec: CircuitSpec, *, search: bool = True) -> QuantumCircuit:
     candidates = [build_circuit(spec)]
     if search and spec.ansatz == "lucj" and spec.layers:
         candidates.append(build_circuit(spec, slater_prep=False))
-    compiled = [compile_native(circuit, search=search) for circuit in candidates]
-    if len(compiled) == 1:
-        return compiled[0]
-    return min(compiled, key=lambda native: (native.count_ops().get("cz", 0), native.depth()))
+    compiled = [compile_native(circuit, search=search,
+                               optimization_level=spec.optimization_level)
+                for circuit in candidates]
+    best = compiled[0] if len(compiled) == 1 else min(
+        compiled, key=lambda native: (native.count_ops().get("cz", 0), native.depth()))
+    return best if spec.twirl_seed is None else twirl(best, spec.twirl_seed)
 
 
 def chain_layouts(count: int) -> list[list[int]]:
@@ -217,7 +263,8 @@ def chain_layouts(count: int) -> list[list[int]]:
     return layouts
 
 
-def compile_native(circuit: QuantumCircuit, *, search: bool = True) -> QuantumCircuit:
+def compile_native(circuit: QuantumCircuit, *, search: bool = True,
+                   optimization_level: int = 3) -> QuantumCircuit:
     """Transpile to rz/sx/x/cz on a linear chain, measuring every qubit.
 
     With ``search`` (the default) it tries each placement of ``chain_layouts`` with every
@@ -238,7 +285,8 @@ def compile_native(circuit: QuantumCircuit, *, search: bool = True) -> QuantumCi
         for seed in seeds:
             candidate = transpile(native, basis_gates=["rz", "sx", "x", "cz"],
                                   coupling_map=edges, initial_layout=layout,
-                                  optimization_level=3, seed_transpiler=seed)
+                                  optimization_level=optimization_level,
+                                  seed_transpiler=seed)
             key = (candidate.count_ops().get("cz", 0), candidate.depth())
             if best is None or key < best[0]:
                 best = (key, candidate)
