@@ -64,6 +64,8 @@ structure-aware mitigation (`docs/shallow-circuits.md`).
 `apps/xxz_dynamics.py` and `apps/xxz_mitigation_analysis.py` run interacting XXZ
 dynamics on MQ02 with free-fermion-twin training and Pauli twirling, and
 `apps/hubbard_krylov_budget.py` tests Krylov sampling for SQD (`docs/dynamics-mitigation.md`).
+`apps/hchain_spin_model.py` derives that spin chain ab initio from the stretched hydrogen
+chain (exchange J(R), spin gaps and FCI spin dynamics against the Heisenberg circuit).
 PCM/RHF runs on CPU or GPU; GPU PCM does not accept a precomputed ERI override.
 `apps/h2_pcm.py` chooses the first available GPU or a CPU and computes
 `E(PCM) - E(gas)`; the CPU path reuses integrals.

@@ -330,3 +330,20 @@ def test_xxz_trotter_twins_compile_to_the_same_gates_and_twirling_is_exact():
 
     assert Operator(plain.remove_final_measurements(inplace=False)).equiv(
         Operator(twirled.remove_final_measurements(inplace=False)))
+
+
+def test_stretched_hydrogen_chain_maps_onto_the_heisenberg_circuit():
+    from hchain_spin_model import exchange, fci_dynamics, heisenberg_dynamics, spin_gaps, staggered
+
+    spacing = 4.0                                              # bohr, STO-6G
+    coupling = exchange(spacing)
+    assert 0.015 < coupling < 0.019                            # 16.7 mEh
+    gaps = spin_gaps(4, spacing, coupling)
+    assert gaps["fci_gaps"] == pytest.approx(gaps["heisenberg_gaps"], rel=0.01)
+    times = np.linspace(0, 4 * 0.5 / coupling, 5)              # two circuit steps of 0.25
+    electrons = fci_dynamics(4, spacing, times)
+    spins = heisenberg_dynamics(4, coupling, times)
+    moment = staggered(electrons["dressed"][0])
+    assert 0.95 < moment < 1
+    for dressed, spin in zip(electrons["dressed"], spins, strict=True):
+        assert staggered(dressed) / moment == pytest.approx(staggered(spin), abs=0.03)
